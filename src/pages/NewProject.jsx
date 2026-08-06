@@ -40,14 +40,14 @@ export default function NewProject() {
       // 4. Le Manager réagit à l'idée
       const managerReply = await askAgent(
         MANAGER.engine,
-        `Tu es le Manager de G-Tech HQ, l'espace de travail multi-agents d'Olivier. Un nouveau projet vient d'être proposé. Ton rôle : accueillir l'idée, poser 2-3 questions de clarification précises pour bien cadrer le projet, et proposer un premier avis sur sa faisabilité technique. Reste concis, professionnel, direct. Réponds en français.`,
+        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ, l'espace de travail multi-agents d'Olivier. Un nouveau projet vient d'être proposé. Ton rôle : accueillir l'idée, poser 2-3 questions de clarification précises pour bien cadrer le projet, et proposer un premier avis sur sa faisabilité technique. Reste concis, professionnel, direct. Réponds en français.`,
         [{ role: 'user', content: idea.trim() }]
       )
 
       await supabase.from('messages').insert({
         project_id: project.id,
         author_id: 'manager',
-        author_name: 'Manager',
+        author_name: MANAGER.name,
         content: managerReply,
       })
 

@@ -31,7 +31,8 @@ function AgentCard({ agent, unassigned }) {
       <div className="flex items-start gap-3 mb-3">
         <AgentAvatar agent={agent} />
         <div>
-          <div className="text-sm font-medium">{agent.role}</div>
+          <div className="text-sm font-medium font-display">{agent.name}</div>
+          <div className="text-xs text-[color:var(--color-gold)] mt-0.5">{agent.role}</div>
           <div className="text-[11px] text-[color:var(--color-mute)] font-mono mt-0.5">{ENGINE_LABEL[agent.engine]}</div>
         </div>
       </div>

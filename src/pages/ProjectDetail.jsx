@@ -47,10 +47,10 @@ export default function ProjectDetail() {
       }))
       const reply = await askAgent(
         agent.engine,
-        `Tu es "${agent.role}" dans G-Tech HQ, l'espace de travail multi-agents d'Olivier. Ton rôle : ${agent.title}. Le projet en cours s'appelle "${project?.name}". Reste concis, professionnel, direct, en français.`,
+        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ, l'espace de travail multi-agents d'Olivier. Ton rôle : ${agent.title}. Le projet en cours s'appelle "${project?.name}". Reste concis, professionnel, direct, en français. Signe naturellement en tant que ${agent.name} si pertinent, sans forcer.`,
         history
       )
-      const agentMsg = { project_id: id, author_id: agent.id, author_name: agent.role, content: reply }
+      const agentMsg = { project_id: id, author_id: agent.id, author_name: agent.name, content: reply }
       const { data: savedReply } = await supabase.from('messages').insert(agentMsg).select().single()
       setMessages(prev => [...prev, savedReply])
     } catch (e) {
@@ -86,7 +86,7 @@ export default function ProjectDetail() {
               onChange={e => setRespondent(e.target.value)}
               className="bg-[color:var(--color-surface)] border border-[color:var(--color-line)] rounded-md text-xs px-2 py-1"
             >
-              {LEADERSHIP.map(a => <option key={a.id} value={a.id}>{a.role}</option>)}
+              {LEADERSHIP.map(a => <option key={a.id} value={a.id}>{a.name} — {a.role}</option>)}
             </select>
           </div>
           <div className="flex gap-2">
