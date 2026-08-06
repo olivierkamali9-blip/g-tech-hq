@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+@theme {
+  /* Palette G-Tech HQ — noir profond + or exécutif */
+  --color-void: #0A0A0C;
+  --color-surface: #131215;
+  --color-surface-2: #1C1A1E;
+  --color-line: #2A271F;
+  --color-line-soft: #201E1A;
+  --color-gold: #C9A227;
+  --color-gold-bright: #E8C468;
+  --color-gold-dim: #8A7020;
+  --color-ivory: #F4F1EA;
+  --color-ivory-dim: #A8A39A;
+  --color-mute: #6E6A62;
+  --color-good: #4E8B62;
+  --color-warn: #B8863C;
+  --color-danger: #A6483C;
+
+  --font-display: "Fraunces", "Georgia", serif;
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--color-void);
+  color: var(--color-ivory);
+  font-family: var(--font-sans);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
+}
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--color-line); border-radius: 8px; }
+*::-webkit-scrollbar-thumb:hover { background: var(--color-gold-dim); }
+
+.font-display { font-family: var(--font-display); }
+.font-mono { font-family: var(--font-mono); }
+
+.hairline { background: linear-gradient(90deg, transparent, var(--color-line) 20%, var(--color-line) 80%, transparent); height: 1px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
