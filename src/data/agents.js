@@ -47,8 +47,16 @@ export const ALL_AGENTS = [...LEADERSHIP, ...POOL]
 // Réserve de prénoms disponibles pour les prochains agents créés par le Manager.
 // À chaque création, on retire le prénom utilisé de cette liste pour garantir l'unicité.
 export const NAME_RESERVE = [
-  'Théo', 'Inès', 'Gabriel', 'Léa', 'Mathis', 'Amara', 'Victor', 'Chloé',
-  'Samir', 'Alicia', 'Benoît', 'Diane', 'Yanis', 'Fiona', 'Hugo', 'Kenza',
+  'Théo', 'Inès', 'Gabriel', 'Léa', 'Mathis', 'Amara', 'Victor', 'Chloé', 'Samir', 'Alicia',
+  'Benoît', 'Diane', 'Yanis', 'Fiona', 'Hugo', 'Kenza', 'Nathan', 'Lina', 'Karim', 'Sophie',
+  'Erwan', 'Nora', 'Bastien', 'Maya', 'Idriss', 'Clara', 'Romain', 'Yasmine', 'Antoine', 'Salomé',
+  'Farid', 'Juliette', 'Noah', 'Zara', 'Cyril', 'Manon', 'Adam', 'Lucie', 'Bilal', 'Emma',
+  'Baptiste', 'Aïcha', 'Simon', 'Rania', 'Elias', 'Sarah', 'Tristan', 'Nour', 'Marc', 'Iris',
+  'Younes', 'Alix', 'Quentin', 'Dina', 'Loïc', 'Maëlys', 'Rayan', 'Célia', 'Vincent', 'Amina',
+  'Timothée', 'Oriane', 'Anis', 'Pauline', 'Elouan', 'Safiya', 'Mehdi', 'Anaïs', 'Corentin', 'Yolande',
+  'Kevin', 'Nesrine', 'Sami', 'Odile', 'Franck', 'Meriem', 'Damien', 'Aya', 'Hicham', 'Solène',
+  'Rémi', 'Farah', 'Anouar', 'Blanche', 'Yacine', 'Coralie', 'Jonas', 'Malia', 'Sébastien', 'Nadège',
+  'Wassim', 'Éva', 'Grégoire', 'Layla', 'Marwan', 'Océane', 'Idris', 'Prisca', 'Florent', 'Estelle',
 ]
 
 export function usedNames() {
