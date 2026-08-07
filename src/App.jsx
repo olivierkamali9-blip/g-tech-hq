@@ -6,6 +6,7 @@ import Projects from './pages/Projects'
 import ProjectDetail from './pages/ProjectDetail'
 import Team from './pages/Team'
 import Messages from './pages/Messages'
+import Meeting from './pages/Meeting'
 import PasswordGate from './components/PasswordGate'
 
 export default function App() {
@@ -19,6 +20,7 @@ export default function App() {
             <Route path="projets" element={<Projects />} />
             <Route path="projets/:id" element={<ProjectDetail />} />
             <Route path="messages" element={<Messages />} />
+            <Route path="reunion" element={<Meeting />} />
             <Route path="equipe" element={<Team />} />
           </Route>
         </Routes>

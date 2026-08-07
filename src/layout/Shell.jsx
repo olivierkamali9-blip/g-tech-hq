@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
-import { LayoutGrid, FolderKanban, Sparkles, Users, Bell, MessageCircle, Menu, X } from 'lucide-react'
+import { LayoutGrid, FolderKanban, Sparkles, Users, Bell, MessageCircle, Users2, Menu, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { getUnreadCount } from '../lib/notifications'
 
@@ -7,6 +7,7 @@ const NAV = [
   { to: '/', label: 'Organisation', icon: LayoutGrid, end: true },
   { to: '/nouveau', label: 'Nouveau projet', icon: Sparkles },
   { to: '/projets', label: 'Mes projets', icon: FolderKanban },
+  { to: '/reunion', label: 'Réunion', icon: Users2 },
   { to: '/messages', label: 'Messages', icon: MessageCircle },
   { to: '/equipe', label: 'Équipe', icon: Users },
 ]

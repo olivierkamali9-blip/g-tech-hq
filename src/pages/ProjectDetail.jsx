@@ -8,7 +8,17 @@ import AgentAvatar from '../components/AgentAvatar'
 import DeleteProjectPanel from '../components/DeleteProjectPanel'
 import ProjectFiles from '../components/ProjectFiles'
 import ReactMarkdown from 'react-markdown'
-import { Send, Eye, Trash2, Paperclip, X, Download } from 'lucide-react'
+import { Send, Eye, Trash2, Paperclip, X, Download, Zap } from 'lucide-react'
+
+const FINANCE_KEYWORDS = ['budget', 'coût', 'cout', 'prix', 'rentab', 'monétis', 'monetis', 'argent', 'revenu', 'client', 'vendre', 'payant']
+const LEGAL_KEYWORDS = ['légal', 'legal', 'loi', 'contrat', 'rgpd', 'données personnelles', 'donnees personnelles', 'droit', 'licence', 'conformité', 'conformite']
+
+function detectConcernedAgent(text) {
+  const lower = text.toLowerCase()
+  if (LEGAL_KEYWORDS.some(k => lower.includes(k))) return 'legal'
+  if (FINANCE_KEYWORDS.some(k => lower.includes(k))) return 'finance'
+  return null
+}
 
 export default function ProjectDetail() {
   const { id } = useParams()
@@ -18,6 +28,7 @@ export default function ProjectDetail() {
   const [attachment, setAttachment] = useState(null)
   const [respondent, setRespondent] = useState('manager')
   const [sending, setSending] = useState(false)
+  const [advancing, setAdvancing] = useState(false)
   const bottomRef = useRef(null)
 
   useEffect(() => {
@@ -71,6 +82,25 @@ export default function ProjectDetail() {
       const agentMsg = { project_id: id, author_id: agent.id, author_name: agent.name, content: reply }
       const { data: savedReply } = await supabase.from('messages').insert(agentMsg).select().single()
       setMessages(prev => [...prev, savedReply])
+
+      // Un autre membre de la Direction intervient de lui-même si le sujet le concerne
+      const concernedId = detectConcernedAgent(text + ' ' + reply)
+      if (concernedId && concernedId !== agent.id) {
+        const concerned = LEADERSHIP.find(a => a.id === concernedId)
+        try {
+          const chimeIn = await askAgent(
+            concerned.engine,
+            `Tu es ${concerned.name}, "${concerned.role}" dans G-Tech HQ. Tu n'as pas été sollicité directement, mais ce qui vient d'être dit dans le projet "${project?.name}" touche à ton domaine (${concerned.title}). Interviens brièvement et seulement si tu as un point pertinent à ajouter — sinon ne dis rien d'inutile, reste concis et va droit au but. En français.`,
+            [...history, { role: 'assistant', content: reply }]
+          )
+          const { data: savedChime } = await supabase.from('messages').insert({
+            project_id: id, author_id: concerned.id, author_name: concerned.name, content: chimeIn,
+          }).select().single()
+          setMessages(prev => [...prev, savedChime])
+        } catch (e) {
+          // pas bloquant si ce second appel échoue
+        }
+      }
     } catch (e) {
       setMessages(prev => [...prev, { id: 'err-' + Date.now(), author_id: 'system', author_name: 'Système', content: `Erreur : ${e.message}` }])
     } finally {
@@ -78,8 +108,46 @@ export default function ProjectDetail() {
     }
   }
 
-  async function deleteMessage(messageId) {
-    if (typeof messageId === 'string' && messageId.startsWith('err-')) {
+  async function advanceProject() {
+    setAdvancing(true)
+    const MANAGER = LEADERSHIP.find(a => a.id === 'manager')
+    try {
+      const history = messages.map(m => ({
+        role: m.author_id === 'user' ? 'user' : 'assistant',
+        content: m.content,
+      }))
+      const decision = await askAgent(
+        MANAGER.engine,
+        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. Le projet "${project?.name}" est en cours. Tu n'attends pas les instructions d'Olivier pour chaque détail : décide toi-même de la prochaine action concrète et utile pour faire avancer le projet vers un résultat livrable, et annonce-la clairement comme une décision déjà prise (pas une question). SEULEMENT si une action nécessite absolument une intervention humaine d'Olivier (un compte à créer, une clé à fournir, un choix stratégique qui t'engage), termine ta réponse par une ligne commençant exactement par "BESOIN_OLIVIER:" suivie d'une phrase courte expliquant quoi. Sinon, ne mets pas cette ligne. Sois concis, direct, en français.`,
+        [...history, { role: 'user', content: 'Fais avancer ce projet maintenant.' }]
+      )
+
+      const [publicPart, needPart] = decision.split(/BESOIN_OLIVIER:/i)
+      const { data: savedReply } = await supabase.from('messages').insert({
+        project_id: id, author_id: MANAGER.id, author_name: MANAGER.name, content: publicPart.trim(),
+      }).select().single()
+      setMessages(prev => [...prev, savedReply])
+
+      await supabase.from('activity_log').insert({
+        project_id: id,
+        label: `${MANAGER.name} a fait avancer « ${project.name} »`,
+      })
+
+      if (needPart && needPart.trim()) {
+        await supabase.from('dm_messages').insert({
+          agent_id: MANAGER.id,
+          author_id: MANAGER.id,
+          content: `À propos du projet **${project.name}** : ${needPart.trim()}`,
+        })
+      }
+    } catch (e) {
+      setMessages(prev => [...prev, { id: 'err-' + Date.now(), author_id: 'system', author_name: 'Système', content: `Erreur : ${e.message}` }])
+    } finally {
+      setAdvancing(false)
+    }
+  }
+
+  async function deleteMessage(messageId) {    if (typeof messageId === 'string' && messageId.startsWith('err-')) {
       setMessages(prev => prev.filter(m => m.id !== messageId))
       return
     }
@@ -159,6 +227,18 @@ export default function ProjectDetail() {
         <div className="border border-dashed border-[color:var(--color-line)] rounded-lg h-48 flex items-center justify-center text-xs text-[color:var(--color-mute)] text-center px-4">
           L'aperçu apparaîtra ici dès que l'équipe produit un livrable.
         </div>
+
+        <button
+          onClick={advanceProject}
+          disabled={advancing}
+          className="mt-4 w-full inline-flex items-center justify-center gap-2 text-xs px-3 py-2.5 rounded-lg bg-[color:var(--color-gold)] text-[color:var(--color-void)] font-medium hover:bg-[color:var(--color-gold-bright)] disabled:opacity-50"
+        >
+          <Zap size={13} />
+          {advancing ? 'Adrien travaille...' : 'Faire avancer le projet'}
+        </button>
+        <p className="text-[10px] text-[color:var(--color-mute)] mt-1.5">
+          Le Manager décide seul de la prochaine étape. S'il a besoin de toi, il t'écrit en message privé.
+        </p>
 
         <ProjectFiles project={project} onProjectUpdate={setProject} />
         <DeleteProjectPanel project={project} onProjectUpdate={setProject} />
