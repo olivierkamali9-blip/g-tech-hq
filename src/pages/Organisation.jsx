@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { ArrowUpRight, Activity } from 'lucide-react'
+import EngineStatus from '../components/EngineStatus'
 
 export default function Organisation() {
   const [projects, setProjects] = useState([])
@@ -37,6 +38,10 @@ export default function Organisation() {
         <StatCard label="Projets actifs" value={projects.filter(p => p.status === 'en_cours').length} />
         <StatCard label="En discussion" value={projects.filter(p => p.status === 'en_discussion' || p.status === 'idee').length} />
         <StatCard label="Livrés" value={projects.filter(p => p.status === 'livre').length} />
+      </div>
+
+      <div className="mb-10">
+        <EngineStatus />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
