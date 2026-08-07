@@ -7,6 +7,7 @@ create table if not exists projects (
   description text not null,
   status text not null default 'idee', -- idee | en_discussion | valide | en_cours | livre
   lead_agent_id text,
+  deletion_votes jsonb default '{}'::jsonb,
   created_at timestamptz default now()
 );
 

@@ -4,7 +4,7 @@ import { askAgent } from '../lib/engines'
 import { ALL_AGENTS, LEADERSHIP } from '../data/agents'
 import AgentAvatar from '../components/AgentAvatar'
 import ReactMarkdown from 'react-markdown'
-import { Send } from 'lucide-react'
+import { Send, Trash2 } from 'lucide-react'
 import { markThreadRead } from '../lib/notifications'
 
 export default function Messages() {
@@ -37,6 +37,16 @@ export default function Messages() {
   }, [activeId, threads])
 
   const currentThread = threads[activeId] || []
+
+  async function deleteMessage(messageId) {
+    if (typeof messageId === 'string' && messageId.startsWith('err-')) {
+      setThreads(prev => ({ ...prev, [activeId]: prev[activeId].filter(m => m.id !== messageId) }))
+      return
+    }
+    if (!confirm('Supprimer ce message ?')) return
+    await supabase.from('dm_messages').delete().eq('id', messageId)
+    setThreads(prev => ({ ...prev, [activeId]: prev[activeId].filter(m => m.id !== messageId) }))
+  }
 
   async function send() {
     if (!input.trim()) return
@@ -115,7 +125,7 @@ export default function Messages() {
             </p>
           )}
           {currentThread.map(m => (
-            <DMBubble key={m.id} message={m} agent={active} />
+            <DMBubble key={m.id} message={m} agent={active} onDelete={() => deleteMessage(m.id)} />
           ))}
           <div ref={bottomRef} />
         </div>
@@ -141,21 +151,30 @@ export default function Messages() {
   )
 }
 
-function DMBubble({ message, agent }) {
+function DMBubble({ message, agent, onDelete }) {
   const isUser = message.author_id === 'user'
   return (
-    <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
+    <div className={`flex gap-3 group ${isUser ? 'flex-row-reverse' : ''}`}>
       {!isUser && <AgentAvatar agent={agent} size="sm" />}
-      <div
-        className={`max-w-[80%] md:max-w-[70%] px-4 py-2.5 rounded-lg text-sm leading-relaxed ${
-          isUser
-            ? 'bg-[color:var(--color-gold)] text-[color:var(--color-void)]'
-            : 'bg-[color:var(--color-surface)] border border-[color:var(--color-line)]'
-        }`}
-      >
-        <div className="prose-msg">
-          <ReactMarkdown>{message.content}</ReactMarkdown>
+      <div className={`flex items-start gap-1.5 ${isUser ? 'flex-row-reverse' : ''}`}>
+        <div
+          className={`max-w-[80%] md:max-w-[70%] px-4 py-2.5 rounded-lg text-sm leading-relaxed ${
+            isUser
+              ? 'bg-[color:var(--color-gold)] text-[color:var(--color-void)]'
+              : 'bg-[color:var(--color-surface)] border border-[color:var(--color-line)]'
+          }`}
+        >
+          <div className="prose-msg">
+            {isUser ? message.content : <ReactMarkdown>{message.content}</ReactMarkdown>}
+          </div>
         </div>
+        <button
+          onClick={onDelete}
+          className="opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 shrink-0 mt-1 flex items-center justify-center text-[color:var(--color-mute)] hover:text-[color:var(--color-danger)]"
+          title="Supprimer ce message"
+        >
+          <Trash2 size={13} />
+        </button>
       </div>
     </div>
   )

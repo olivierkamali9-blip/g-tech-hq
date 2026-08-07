@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { FolderKanban } from 'lucide-react'
+import { FolderKanban, Trash2 } from 'lucide-react'
 
 const STATUS_LABEL = {
   idee: 'Idée',
@@ -10,6 +10,7 @@ const STATUS_LABEL = {
   en_cours: 'En cours',
   livre: 'Livré',
 }
+const SIMPLE_STATUSES = ['idee', 'en_discussion']
 
 export default function Projects() {
   const [projects, setProjects] = useState([])
@@ -21,6 +22,14 @@ export default function Projects() {
       setLoading(false)
     })
   }, [])
+
+  async function quickDelete(e, p) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!confirm(`Supprimer « ${p.name} » ? Cette action est définitive.`)) return
+    await supabase.from('projects').delete().eq('id', p.id)
+    setProjects(prev => prev.filter(x => x.id !== p.id))
+  }
 
   return (
     <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-10">
@@ -48,9 +57,20 @@ export default function Projects() {
           >
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium">{p.name}</span>
-              <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full border border-[color:var(--color-line)] text-[color:var(--color-ivory-dim)]">
-                {STATUS_LABEL[p.status] || p.status}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full border border-[color:var(--color-line)] text-[color:var(--color-ivory-dim)]">
+                  {STATUS_LABEL[p.status] || p.status}
+                </span>
+                {SIMPLE_STATUSES.includes(p.status) && (
+                  <button
+                    onClick={e => quickDelete(e, p)}
+                    className="w-6 h-6 flex items-center justify-center text-[color:var(--color-mute)] hover:text-[color:var(--color-danger)]"
+                    title="Supprimer"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </div>
             </div>
             <p className="text-xs text-[color:var(--color-mute)] line-clamp-2">{p.description}</p>
           </Link>
