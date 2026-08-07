@@ -6,6 +6,7 @@ import { readFileAsText, downloadTextFile, READABLE_EXT } from '../lib/files'
 import { ALL_AGENTS, LEADERSHIP } from '../data/agents'
 import AgentAvatar from '../components/AgentAvatar'
 import DeleteProjectPanel from '../components/DeleteProjectPanel'
+import ProjectFiles from '../components/ProjectFiles'
 import ReactMarkdown from 'react-markdown'
 import { Send, Eye, Trash2, Paperclip, X, Download } from 'lucide-react'
 
@@ -159,6 +160,7 @@ export default function ProjectDetail() {
           L'aperçu apparaîtra ici dès que l'équipe produit un livrable.
         </div>
 
+        <ProjectFiles project={project} onProjectUpdate={setProject} />
         <DeleteProjectPanel project={project} onProjectUpdate={setProject} />
       </div>
     </div>
