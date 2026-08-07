@@ -1,0 +1,162 @@
+import { useEffect, useRef, useState } from 'react'
+import { supabase } from '../lib/supabase'
+import { askAgent } from '../lib/engines'
+import { ALL_AGENTS, LEADERSHIP } from '../data/agents'
+import AgentAvatar from '../components/AgentAvatar'
+import ReactMarkdown from 'react-markdown'
+import { Send } from 'lucide-react'
+import { markThreadRead } from '../lib/notifications'
+
+export default function Messages() {
+  const [activeId, setActiveId] = useState(LEADERSHIP[0].id)
+  const [threads, setThreads] = useState({})
+  const [input, setInput] = useState('')
+  const [sending, setSending] = useState(false)
+  const bottomRef = useRef(null)
+  const active = ALL_AGENTS.find(a => a.id === activeId)
+
+  useEffect(() => {
+    async function load() {
+      const { data } = await supabase.from('dm_messages').select('*').order('created_at', { ascending: true })
+      const grouped = {}
+      for (const m of data || []) {
+        grouped[m.agent_id] = grouped[m.agent_id] || []
+        grouped[m.agent_id].push(m)
+      }
+      setThreads(grouped)
+    }
+    load()
+  }, [])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [threads, activeId])
+
+  useEffect(() => {
+    markThreadRead(activeId)
+  }, [activeId, threads])
+
+  const currentThread = threads[activeId] || []
+
+  async function send() {
+    if (!input.trim()) return
+    setSending(true)
+    const text = input.trim()
+    setInput('')
+
+    const userMsg = { agent_id: activeId, author_id: 'user', content: text }
+    const { data: saved } = await supabase.from('dm_messages').insert(userMsg).select().single()
+    setThreads(prev => ({ ...prev, [activeId]: [...(prev[activeId] || []), saved] }))
+
+    try {
+      const history = [...currentThread, saved].map(m => ({
+        role: m.author_id === 'user' ? 'user' : 'assistant',
+        content: m.content,
+      }))
+      const reply = await askAgent(
+        active.engine,
+        `Tu es ${active.name}, "${active.role}" dans G-Tech HQ. C'est une conversation privée en tête-à-tête avec Olivier. Réponds comme un collègue de confiance : clair, synthétique, direct, jamais de blabla inutile. Utilise le markdown seulement quand ça aide vraiment (listes courtes, gras ponctuel), pas systématiquement. En français.`,
+        history
+      )
+      const { data: savedReply } = await supabase
+        .from('dm_messages')
+        .insert({ agent_id: activeId, author_id: activeId, content: reply })
+        .select()
+        .single()
+      setThreads(prev => ({ ...prev, [activeId]: [...(prev[activeId] || []), savedReply] }))
+    } catch (e) {
+      setThreads(prev => ({
+        ...prev,
+        [activeId]: [...(prev[activeId] || []), { id: 'err-' + Date.now(), author_id: 'system', content: `Erreur : ${e.message}` }],
+      }))
+    } finally {
+      setSending(false)
+    }
+  }
+
+  return (
+    <div className="h-full flex flex-col md:flex-row">
+      {/* Liste des agents */}
+      <div className="w-full md:w-64 shrink-0 border-b md:border-b-0 md:border-r border-[color:var(--color-line)] px-4 py-4 overflow-y-auto">
+        <div className="text-[11px] uppercase tracking-[0.15em] text-[color:var(--color-mute)] px-2 mb-3">Messages privés</div>
+        <div className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible">
+          {ALL_AGENTS.map(a => (
+            <button
+              key={a.id}
+              onClick={() => setActiveId(a.id)}
+              className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left shrink-0 transition-colors ${
+                activeId === a.id ? 'bg-[color:var(--color-surface-2)]' : 'hover:bg-[color:var(--color-surface)]'
+              }`}
+            >
+              <AgentAvatar agent={a} size="sm" />
+              <div className="hidden md:block">
+                <div className="text-sm">{a.name}</div>
+                <div className="text-[10px] text-[color:var(--color-mute)]">{a.role}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Fil de conversation */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <div className="px-6 py-4 border-b border-[color:var(--color-line)] flex items-center gap-3">
+          <AgentAvatar agent={active} />
+          <div>
+            <div className="font-display text-base">{active.name}</div>
+            <div className="text-xs text-[color:var(--color-mute)]">{active.role}</div>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">
+          {currentThread.length === 0 && (
+            <p className="text-sm text-[color:var(--color-mute)] text-center mt-10">
+              Aucun message avec {active.name} pour l'instant.
+            </p>
+          )}
+          {currentThread.map(m => (
+            <DMBubble key={m.id} message={m} agent={active} />
+          ))}
+          <div ref={bottomRef} />
+        </div>
+
+        <div className="p-4 border-t border-[color:var(--color-line)] flex gap-2">
+          <input
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && send()}
+            placeholder={`Écrire à ${active.name}...`}
+            className="flex-1 bg-[color:var(--color-surface)] border border-[color:var(--color-line)] rounded-lg px-4 py-2.5 text-sm placeholder:text-[color:var(--color-mute)] focus:border-[color:var(--color-gold-dim)] outline-none"
+          />
+          <button
+            onClick={send}
+            disabled={sending || !input.trim()}
+            className="w-11 h-11 shrink-0 rounded-lg bg-[color:var(--color-gold)] flex items-center justify-center disabled:opacity-40"
+          >
+            <Send size={16} className="text-[color:var(--color-void)]" />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function DMBubble({ message, agent }) {
+  const isUser = message.author_id === 'user'
+  return (
+    <div className={`flex gap-3 ${isUser ? 'flex-row-reverse' : ''}`}>
+      {!isUser && <AgentAvatar agent={agent} size="sm" />}
+      <div
+        className={`max-w-[80%] md:max-w-[70%] px-4 py-2.5 rounded-lg text-sm leading-relaxed ${
+          isUser
+            ? 'bg-[color:var(--color-gold)] text-[color:var(--color-void)]'
+            : 'bg-[color:var(--color-surface)] border border-[color:var(--color-line)]'
+        }`}
+      >
+        <div className="prose-msg">
+          <ReactMarkdown>{message.content}</ReactMarkdown>
+        </div>
+      </div>
+    </div>
+  )
+}

@@ -6,6 +6,7 @@ const KEYS = {
   groq: import.meta.env.VITE_GROQ_API_KEY,
   mistral: import.meta.env.VITE_MISTRAL_API_KEY,
   openrouter: import.meta.env.VITE_OPENROUTER_API_KEY,
+  xai: import.meta.env.VITE_XAI_API_KEY,
 }
 
 async function callGemini(systemPrompt, messages) {
@@ -14,7 +15,7 @@ async function callGemini(systemPrompt, messages) {
     parts: [{ text: m.content }],
   }))
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${KEYS.gemini}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${KEYS.gemini}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -80,16 +81,41 @@ async function callOpenRouter(systemPrompt, messages) {
   return data?.choices?.[0]?.message?.content ?? ''
 }
 
+async function callXai(systemPrompt, messages) {
+  const res = await fetch('https://api.x.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${KEYS.xai}`,
+    },
+    body: JSON.stringify({
+      model: 'grok-4-fast',
+      messages: [{ role: 'system', content: systemPrompt }, ...messages],
+    }),
+  })
+  const data = await res.json()
+  if (!res.ok) throw new Error(data?.error?.message || 'Erreur xAI (Grok)')
+  return data?.choices?.[0]?.message?.content ?? ''
+}
+
 const ENGINES = {
   gemini: callGemini,
   groq: callGroq,
   mistral: callMistral,
   openrouter: callOpenRouter,
+  xai: callXai,
 }
 
 export async function askAgent(engine, systemPrompt, messages) {
   const fn = ENGINES[engine]
   if (!fn) throw new Error(`Moteur inconnu: ${engine}`)
   if (!KEYS[engine]) throw new Error(`Clé API manquante pour ${engine} — vérifie .env.local`)
-  return fn(systemPrompt, messages)
+  try {
+    return await fn(systemPrompt, messages)
+  } catch (e) {
+    if (String(e.message).toLowerCase().includes('quota') || String(e.message).includes('429')) {
+      throw new Error(`Quota gratuit temporairement atteint sur ${engine}. Réessaie dans une minute, ou choisis un autre agent (moteur différent) pour continuer sans attendre.`)
+    }
+    throw e
+  }
 }

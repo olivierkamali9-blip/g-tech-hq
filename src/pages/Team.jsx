@@ -3,7 +3,7 @@ import AgentAvatar from '../components/AgentAvatar'
 
 export default function Team() {
   return (
-    <div className="max-w-5xl mx-auto px-8 py-10">
+    <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-10">
       <div className="mb-10">
         <div className="text-[11px] uppercase tracking-[0.2em] text-[color:var(--color-gold)] mb-2">Équipe</div>
         <h1 className="font-display text-3xl">Qui compose G-Tech HQ</h1>
@@ -13,12 +13,12 @@ export default function Team() {
       </div>
 
       <h2 className="font-display text-lg mb-4">Direction</h2>
-      <div className="grid grid-cols-3 gap-4 mb-12">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-12">
         {LEADERSHIP.map(a => <AgentCard key={a.id} agent={a} />)}
       </div>
 
       <h2 className="font-display text-lg mb-4">Réservoir de talents</h2>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {POOL.map(a => <AgentCard key={a.id} agent={a} unassigned />)}
       </div>
     </div>

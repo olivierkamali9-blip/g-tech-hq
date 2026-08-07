@@ -40,7 +40,7 @@ export default function NewProject() {
       // 4. Le Manager réagit à l'idée
       const managerReply = await askAgent(
         MANAGER.engine,
-        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ, l'espace de travail multi-agents d'Olivier. Un nouveau projet vient d'être proposé. Ton rôle : accueillir l'idée, poser 2-3 questions de clarification précises pour bien cadrer le projet, et proposer un premier avis sur sa faisabilité technique. Reste concis, professionnel, direct. Réponds en français.`,
+        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ, l'espace de travail multi-agents d'Olivier. Un nouveau projet vient d'être proposé. Ton rôle : accueillir l'idée, poser 2-3 questions de clarification précises pour bien cadrer le projet, et proposer un premier avis sur sa faisabilité technique. Réponds comme un collègue de confiance : clair, synthétique, direct, sans blabla. Utilise le markdown seulement si ça aide vraiment. En français.`,
         [{ role: 'user', content: idea.trim() }]
       )
 
@@ -65,7 +65,7 @@ export default function NewProject() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto px-8 py-16">
+    <div className="max-w-2xl mx-auto px-4 md:px-8 py-10 md:py-16">
       <div className="text-[11px] uppercase tracking-[0.2em] text-[color:var(--color-gold)] mb-2">Nouveau projet</div>
       <h1 className="font-display text-3xl mb-3">Décris ce que tu as en tête</h1>
       <p className="text-[color:var(--color-ivory-dim)] text-sm mb-8">

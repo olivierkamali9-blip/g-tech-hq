@@ -42,6 +42,15 @@ html, body, #root {
 
 .hairline { background: linear-gradient(90deg, transparent, var(--color-line) 20%, var(--color-line) 80%, transparent); height: 1px; }
 
+/* Rendu markdown des messages d'agents — clair et synthétique, à la Claude */
+.prose-msg p { margin: 0 0 0.6em 0; }
+.prose-msg p:last-child { margin-bottom: 0; }
+.prose-msg strong { color: var(--color-gold-bright); font-weight: 600; }
+.prose-msg ul, .prose-msg ol { margin: 0.4em 0 0.6em 0; padding-left: 1.2em; }
+.prose-msg li { margin-bottom: 0.25em; }
+.prose-msg code { background: var(--color-void); padding: 0.1em 0.4em; border-radius: 4px; font-family: var(--font-mono); font-size: 0.85em; }
+.prose-msg h1, .prose-msg h2, .prose-msg h3 { font-family: var(--font-display); margin: 0.6em 0 0.3em 0; font-size: 1.05em; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

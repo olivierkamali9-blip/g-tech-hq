@@ -22,7 +22,7 @@ export default function Organisation() {
   }, [])
 
   return (
-    <div className="max-w-5xl mx-auto px-8 py-10">
+    <div className="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-10">
       <div className="mb-10">
         <div className="text-[11px] uppercase tracking-[0.2em] text-[color:var(--color-gold)] mb-2">Vue d'ensemble</div>
         <h1 className="font-display text-3xl">L'organisation, en un coup d'œil</h1>
@@ -33,13 +33,13 @@ export default function Organisation() {
         </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-4 mb-10">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
         <StatCard label="Projets actifs" value={projects.filter(p => p.status === 'en_cours').length} />
         <StatCard label="En discussion" value={projects.filter(p => p.status === 'en_discussion' || p.status === 'idee').length} />
         <StatCard label="Livrés" value={projects.filter(p => p.status === 'livre').length} />
       </div>
 
-      <div className="grid grid-cols-5 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
         <div className="col-span-3">
           <h2 className="font-display text-lg mb-4">Projets récents</h2>
           {projects.length === 0 ? (

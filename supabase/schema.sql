@@ -42,4 +42,13 @@ alter table activity_log enable row level security;
 create policy "allow all - projects" on projects for all using (true) with check (true);
 create policy "allow all - project_agents" on project_agents for all using (true) with check (true);
 create policy "allow all - messages" on messages for all using (true) with check (true);
-create policy "allow all - activity_log" on activity_log for all using (true) with check (true);
+-- Messagerie privée : conversations 1-à-1 entre Olivier et chaque agent
+create table if not exists dm_messages (
+  id uuid primary key default gen_random_uuid(),
+  agent_id text not null,         -- id de l'agent concerné par ce fil
+  author_id text not null,        -- 'user' ou l'id de l'agent
+  content text not null,
+  created_at timestamptz default now()
+);
+alter table dm_messages enable row level security;
+create policy "allow all - dm_messages" on dm_messages for all using (true) with check (true);
