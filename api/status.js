@@ -56,7 +56,7 @@ async function checkGithub() {
   return { ok: res.ok, expiresAt: expiresHeader || null }
 }
 
-const CHECKS = { gemini: pingGemini, groq: pingGroq, mistral: pingMistral, openrouter: pingOpenRouter, xai: pingXai }
+const CHECKS = { gemini: pingGemini, groq: pingGroq, mistral: pingMistral, openrouter: pingOpenRouter }
 
 export default async function handler(req, res) {
   const results = {}

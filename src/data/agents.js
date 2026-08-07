@@ -74,5 +74,4 @@ export const ENGINE_LABEL = {
   groq: 'Groq',
   mistral: 'Mistral',
   openrouter: 'OpenRouter',
-  xai: 'xAI (Grok)',
 }
