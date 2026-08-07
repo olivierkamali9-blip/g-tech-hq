@@ -2,17 +2,19 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { askAgent } from '../lib/engines'
+import { readFileAsText, downloadTextFile, READABLE_EXT } from '../lib/files'
 import { ALL_AGENTS, LEADERSHIP } from '../data/agents'
 import AgentAvatar from '../components/AgentAvatar'
 import DeleteProjectPanel from '../components/DeleteProjectPanel'
 import ReactMarkdown from 'react-markdown'
-import { Send, Eye, Trash2 } from 'lucide-react'
+import { Send, Eye, Trash2, Paperclip, X, Download } from 'lucide-react'
 
 export default function ProjectDetail() {
   const { id } = useParams()
   const [project, setProject] = useState(null)
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
+  const [attachment, setAttachment] = useState(null)
   const [respondent, setRespondent] = useState('manager')
   const [sending, setSending] = useState(false)
   const bottomRef = useRef(null)
@@ -31,11 +33,24 @@ export default function ProjectDetail() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  async function handleFile(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const isReadable = READABLE_EXT.some(ext => file.name.toLowerCase().endsWith(ext))
+    if (!isReadable) return
+    const content = await readFileAsText(file)
+    setAttachment({ name: file.name, content })
+    e.target.value = ''
+  }
+
   async function send() {
-    if (!input.trim()) return
+    if (!input.trim() && !attachment) return
     setSending(true)
-    const text = input.trim()
+    const text = attachment
+      ? `${input.trim()}\n\n📎 Document joint : ${attachment.name}\n---\n${attachment.content}`
+      : input.trim()
     setInput('')
+    setAttachment(null)
 
     const userMsg = { project_id: id, author_id: 'user', author_name: 'Olivier', content: text }
     const { data: saved } = await supabase.from('messages').insert(userMsg).select().single()
@@ -49,7 +64,7 @@ export default function ProjectDetail() {
       }))
       const reply = await askAgent(
         agent.engine,
-        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ, l'espace de travail multi-agents d'Olivier. Ton rôle : ${agent.title}. Le projet en cours s'appelle "${project?.name}". Réponds comme un collègue de confiance et compétent : clair, synthétique, jamais de blabla ni de formules creuses, va droit au but tout en restant pertinent. Utilise le markdown seulement quand ça aide vraiment (liste courte, gras ponctuel), pas systématiquement. En français.`,
+        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ, l'espace de travail multi-agents d'Olivier. Ton rôle : ${agent.title}. Le projet en cours s'appelle "${project?.name}". Réponds comme un collègue de confiance et compétent : clair, synthétique, jamais de blabla ni de formules creuses, va droit au but tout en restant pertinent. Si Olivier te demande un document (rapport, cahier des charges, texte structuré...), rédige-le entièrement et proprement en markdown — il pourra le télécharger directement. Utilise le markdown seulement quand ça aide vraiment (liste courte, gras ponctuel), pas systématiquement. En français.`,
         history
       )
       const agentMsg = { project_id: id, author_id: agent.id, author_name: agent.name, content: reply }
@@ -101,7 +116,22 @@ export default function ProjectDetail() {
               {LEADERSHIP.map(a => <option key={a.id} value={a.id}>{a.name} — {a.role}</option>)}
             </select>
           </div>
+
+          {attachment && (
+            <div className="mb-2 flex items-center gap-2 text-xs bg-[color:var(--color-surface)] border border-[color:var(--color-line)] rounded-lg px-3 py-1.5 w-fit">
+              <Paperclip size={12} className="text-[color:var(--color-gold)]" />
+              <span>{attachment.name}</span>
+              <button onClick={() => setAttachment(null)} className="text-[color:var(--color-mute)] hover:text-[color:var(--color-danger)]">
+                <X size={12} />
+              </button>
+            </div>
+          )}
+
           <div className="flex gap-2">
+            <label className="w-11 h-11 shrink-0 rounded-lg border border-[color:var(--color-line)] flex items-center justify-center cursor-pointer hover:border-[color:var(--color-gold-dim)] transition-colors">
+              <Paperclip size={16} className="text-[color:var(--color-ivory-dim)]" />
+              <input type="file" accept=".txt,.md,.csv,.json" onChange={handleFile} className="hidden" />
+            </label>
             <input
               value={input}
               onChange={e => setInput(e.target.value)}
@@ -111,8 +141,8 @@ export default function ProjectDetail() {
             />
             <button
               onClick={send}
-              disabled={sending || !input.trim()}
-              className="w-11 h-11 rounded-lg bg-[color:var(--color-gold)] flex items-center justify-center disabled:opacity-40"
+              disabled={sending || (!input.trim() && !attachment)}
+              className="w-11 h-11 shrink-0 rounded-lg bg-[color:var(--color-gold)] flex items-center justify-center disabled:opacity-40"
             >
               <Send size={16} className="text-[color:var(--color-void)]" />
             </button>
@@ -165,6 +195,15 @@ function MessageBubble({ message, onDelete }) {
           >
             <Trash2 size={13} />
           </button>
+          {!isUser && (
+            <button
+              onClick={() => downloadTextFile(`${message.author_name}-${Date.now()}.md`, message.content)}
+              className="opacity-0 group-hover:opacity-100 transition-opacity w-6 h-6 shrink-0 mt-1 flex items-center justify-center text-[color:var(--color-mute)] hover:text-[color:var(--color-gold)]"
+              title="Télécharger ce message en document"
+            >
+              <Download size={13} />
+            </button>
+          )}
         </div>
       </div>
     </div>
