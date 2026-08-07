@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { askAgent } from '../lib/engines'
+import { getOrgSnapshot, getAgentMemory } from '../lib/context'
 import { ALL_AGENTS, LEADERSHIP } from '../data/agents'
 import AgentAvatar from '../components/AgentAvatar'
 import ReactMarkdown from 'react-markdown'
@@ -65,7 +66,7 @@ export default function Messages() {
       }))
       const reply = await askAgent(
         active.engine,
-        `Tu es ${active.name}, "${active.role}" dans G-Tech HQ. C'est une conversation privée en tête-à-tête avec Olivier. Réponds comme un collègue de confiance : clair, synthétique, direct, jamais de blabla inutile. Utilise le markdown seulement quand ça aide vraiment (listes courtes, gras ponctuel), pas systématiquement. En français.`,
+        `Tu es ${active.name}, "${active.role}" dans G-Tech HQ. C'est une conversation privée en tête-à-tête avec Olivier.\n\n${await getOrgSnapshot()}\n\n${await getAgentMemory(active.id, [saved.id])}\n\nRéponds comme un collègue de confiance : clair, synthétique, direct. Ne parle que de ce qui relève de ton rôle. Ne cite jamais un collègue qui n'existe pas dans le contexte ci-dessus. En français.`,
         history
       )
       const { data: savedReply } = await supabase

@@ -8,16 +8,34 @@ export const LEADERSHIP = [
     id: 'manager',
     name: 'Adrien',
     role: 'Manager',
-    title: 'Supervise, assigne les agents, valide avant publication',
+    title: 'Coordonne toute l\'organisation, attribue les tâches, valide le travail, arbitre les conflits, suit les projets, ne remonte à Olivier que les décisions stratégiques',
     engine: 'gemini',
     initials: 'AD',
+    tier: 'leadership',
+  },
+  {
+    id: 'cto',
+    name: 'Gabriel',
+    role: 'CTO',
+    title: 'Valide l\'architecture technique, les technologies, les standards de code, la sécurité',
+    engine: 'mistral',
+    initials: 'GA',
+    tier: 'leadership',
+  },
+  {
+    id: 'cpo',
+    name: 'Inès',
+    role: 'CPO',
+    title: 'Valide les fonctionnalités, les priorités produit, la cohérence avec la vision',
+    engine: 'gemini',
+    initials: 'IN',
     tier: 'leadership',
   },
   {
     id: 'finance',
     name: 'Élise',
     role: 'Finance & Stratégie',
-    title: 'Challenge la rentabilité, propose la monétisation',
+    title: 'Valide les impacts financiers, coûts, revenus, modèles économiques',
     engine: 'mistral',
     initials: 'ÉL',
     tier: 'leadership',
@@ -26,7 +44,7 @@ export const LEADERSHIP = [
     id: 'legal',
     name: 'Nadia',
     role: 'Juridique',
-    title: 'Vérifie la conformité légale des projets',
+    title: 'Valide les contrats, licences, conformité et propriété intellectuelle',
     engine: 'groq',
     initials: 'NA',
     tier: 'leadership',
@@ -34,11 +52,12 @@ export const LEADERSHIP = [
 ]
 
 export const POOL = [
-  { id: 'backend-1', name: 'Julien', role: 'Développeur Backend', title: 'APIs, bases de données, logique serveur', engine: 'mistral', initials: 'JU', tier: 'pool' },
-  { id: 'frontend-1', name: 'Sacha', role: 'Développeur Frontend', title: 'Interfaces, expérience utilisateur', engine: 'groq', initials: 'SA', tier: 'pool' },
-  { id: 'design-1', name: 'Camille', role: 'Designer', title: 'Identité visuelle, maquettes, images', engine: 'gemini', initials: 'CA', tier: 'pool' },
+  { id: 'backend-1', name: 'Julien', role: 'Développeur Backend', title: 'Implémente les fonctionnalités serveur selon les spécifications validées', engine: 'mistral', initials: 'JU', tier: 'pool' },
+  { id: 'frontend-1', name: 'Sacha', role: 'Développeur Frontend', title: 'Implémente les interfaces selon les spécifications validées', engine: 'groq', initials: 'SA', tier: 'pool' },
+  { id: 'design-1', name: 'Camille', role: 'UX/UI', title: 'Conçoit les interfaces, l\'identité visuelle, les maquettes', engine: 'gemini', initials: 'CA', tier: 'pool' },
   { id: 'writer-1', name: 'Louis', role: 'Rédaction & Documentation', title: 'Rapports, textes, documentation', engine: 'gemini', initials: 'LO', tier: 'pool' },
-  { id: 'qa-1', name: 'Naomi', role: 'Qualité & Tests', title: 'Vérifie le travail avant validation Manager', engine: 'groq', initials: 'NO', tier: 'pool' },
+  { id: 'qa-1', name: 'Naomi', role: 'QA', title: 'Teste et valide la qualité avant transmission au Chef de Projet', engine: 'groq', initials: 'NO', tier: 'pool' },
+  { id: 'devops-1', name: 'Léa', role: 'DevOps', title: 'Déploie et maintient l\'infrastructure (GitHub, Vercel, Supabase)', engine: 'mistral', initials: 'LE', tier: 'pool' },
   { id: 'dev-2', name: 'Malik', role: 'Développeur (renfort)', title: 'Appui technique polyvalent', engine: 'openrouter', initials: 'MA', tier: 'pool' },
 ]
 
@@ -47,7 +66,7 @@ export const ALL_AGENTS = [...LEADERSHIP, ...POOL]
 // Réserve de prénoms disponibles pour les prochains agents créés par le Manager.
 // À chaque création, on retire le prénom utilisé de cette liste pour garantir l'unicité.
 export const NAME_RESERVE = [
-  'Théo', 'Inès', 'Gabriel', 'Léa', 'Mathis', 'Amara', 'Victor', 'Chloé', 'Samir', 'Alicia',
+  'Théo', 'Mathis', 'Amara', 'Victor', 'Chloé', 'Samir', 'Alicia',
   'Benoît', 'Diane', 'Yanis', 'Fiona', 'Hugo', 'Kenza', 'Nathan', 'Lina', 'Karim', 'Sophie',
   'Erwan', 'Nora', 'Bastien', 'Maya', 'Idriss', 'Clara', 'Romain', 'Yasmine', 'Antoine', 'Salomé',
   'Farid', 'Juliette', 'Noah', 'Zara', 'Cyril', 'Manon', 'Adam', 'Lucie', 'Bilal', 'Emma',

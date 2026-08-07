@@ -2,16 +2,20 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { askAgent } from '../lib/engines'
+import { getOrgSnapshot, getAgentMemory } from '../lib/context'
 import { readFileAsText, downloadTextFile, READABLE_EXT } from '../lib/files'
-import { ALL_AGENTS, LEADERSHIP } from '../data/agents'
+import { ALL_AGENTS, LEADERSHIP, POOL } from '../data/agents'
 import AgentAvatar from '../components/AgentAvatar'
 import DeleteProjectPanel from '../components/DeleteProjectPanel'
 import ProjectFiles from '../components/ProjectFiles'
+import AssignTeamPanel from '../components/AssignTeamPanel'
 import ReactMarkdown from 'react-markdown'
-import { Send, Eye, Trash2, Paperclip, X, Download, Zap } from 'lucide-react'
+import { Send, Eye, Trash2, Paperclip, X, Download, Zap, Pencil, Check } from 'lucide-react'
 
 const FINANCE_KEYWORDS = ['budget', 'coût', 'cout', 'prix', 'rentab', 'monétis', 'monetis', 'argent', 'revenu', 'client', 'vendre', 'payant']
 const LEGAL_KEYWORDS = ['légal', 'legal', 'loi', 'contrat', 'rgpd', 'données personnelles', 'donnees personnelles', 'droit', 'licence', 'conformité', 'conformite']
+const STATUSES = ['idee', 'en_discussion', 'valide', 'en_cours', 'livre']
+const STATUS_LABEL = { idee: 'Idée', en_discussion: 'En discussion', valide: 'Validé', en_cours: 'En cours', livre: 'Livré' }
 
 function detectConcernedAgent(text) {
   const lower = text.toLowerCase()
@@ -24,26 +28,39 @@ export default function ProjectDetail() {
   const { id } = useParams()
   const [project, setProject] = useState(null)
   const [messages, setMessages] = useState([])
+  const [projectAgents, setProjectAgents] = useState([]) // [{agent_id, role_in_project}]
   const [input, setInput] = useState('')
   const [attachment, setAttachment] = useState(null)
   const [respondent, setRespondent] = useState('manager')
   const [sending, setSending] = useState(false)
   const [advancing, setAdvancing] = useState(false)
+  const [editingName, setEditingName] = useState(false)
+  const [nameDraft, setNameDraft] = useState('')
   const bottomRef = useRef(null)
 
-  useEffect(() => {
-    async function load() {
-      const { data: p } = await supabase.from('projects').select('*').eq('id', id).single()
-      const { data: m } = await supabase.from('messages').select('*').eq('project_id', id).order('created_at', { ascending: true })
-      setProject(p)
-      setMessages(m || [])
-    }
-    load()
-  }, [id])
+  async function loadAll() {
+    const [{ data: p }, { data: m }, { data: pa }] = await Promise.all([
+      supabase.from('projects').select('*').eq('id', id).single(),
+      supabase.from('messages').select('*').eq('project_id', id).order('created_at', { ascending: true }),
+      supabase.from('project_agents').select('*').eq('project_id', id),
+    ])
+    setProject(p)
+    setMessages(m || [])
+    setProjectAgents(pa || [])
+    if (p) setNameDraft(p.name)
+  }
+
+  useEffect(() => { loadAll() }, [id])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  // Qui peut répondre : la Direction + les agents réellement assignés à ce projet
+  const respondable = [
+    ...LEADERSHIP,
+    ...POOL.filter(a => projectAgents.some(pa => pa.agent_id === a.id)),
+  ]
 
   async function handleFile(e) {
     const file = e.target.files?.[0]
@@ -53,6 +70,19 @@ export default function ProjectDetail() {
     const content = await readFileAsText(file)
     setAttachment({ name: file.name, content })
     e.target.value = ''
+  }
+
+  async function saveName() {
+    if (!nameDraft.trim()) return
+    const { data } = await supabase.from('projects').update({ name: nameDraft.trim() }).eq('id', id).select().single()
+    setProject(data)
+    setEditingName(false)
+  }
+
+  async function changeStatus(newStatus) {
+    const { data } = await supabase.from('projects').update({ status: newStatus }).eq('id', id).select().single()
+    setProject(data)
+    await supabase.from('activity_log').insert({ project_id: id, label: `Statut de « ${data.name} » changé en ${STATUS_LABEL[newStatus]}` })
   }
 
   async function send() {
@@ -74,32 +104,31 @@ export default function ProjectDetail() {
         role: m.author_id === 'user' ? 'user' : 'assistant',
         content: m.content,
       }))
+      const [orgContext, agentMemory] = await Promise.all([getOrgSnapshot(), getAgentMemory(agent.id)])
       const reply = await askAgent(
         agent.engine,
-        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ, l'espace de travail multi-agents d'Olivier. Ton rôle : ${agent.title}. Le projet en cours s'appelle "${project?.name}". Réponds comme un collègue de confiance et compétent : clair, synthétique, jamais de blabla ni de formules creuses, va droit au but tout en restant pertinent. Si Olivier te demande un document (rapport, cahier des charges, texte structuré...), rédige-le entièrement et proprement en markdown — il pourra le télécharger directement. Utilise le markdown seulement quand ça aide vraiment (liste courte, gras ponctuel), pas systématiquement. En français.`,
+        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ, l'espace de travail multi-agents d'Olivier. Ton rôle : ${agent.title}.\n\n${orgContext}\n\n${agentMemory}\n\nLe projet en cours s'appelle "${project?.name}". Réponds comme un collègue de confiance et compétent : clair, synthétique, jamais de blabla ni de formules creuses, va droit au but. Ne parle QUE de ce qui relève de ton rôle ; si une question dépasse ton domaine, dis que c'est à un autre membre de l'équipe de répondre (nomme-le si tu sais qui). Ne connais et ne cite jamais un collègue qui n'est pas listé dans le contexte ci-dessus — s'invente un nom, c'est une faute grave. Si Olivier te demande un document, rédige-le entièrement en markdown. En français.`,
         history
       )
       const agentMsg = { project_id: id, author_id: agent.id, author_name: agent.name, content: reply }
       const { data: savedReply } = await supabase.from('messages').insert(agentMsg).select().single()
       setMessages(prev => [...prev, savedReply])
 
-      // Un autre membre de la Direction intervient de lui-même si le sujet le concerne
       const concernedId = detectConcernedAgent(text + ' ' + reply)
       if (concernedId && concernedId !== agent.id) {
         const concerned = LEADERSHIP.find(a => a.id === concernedId)
         try {
+          const [chimeOrg, chimeMemory] = await Promise.all([getOrgSnapshot(), getAgentMemory(concerned.id)])
           const chimeIn = await askAgent(
             concerned.engine,
-            `Tu es ${concerned.name}, "${concerned.role}" dans G-Tech HQ. Tu n'as pas été sollicité directement, mais ce qui vient d'être dit dans le projet "${project?.name}" touche à ton domaine (${concerned.title}). Interviens brièvement et seulement si tu as un point pertinent à ajouter — sinon ne dis rien d'inutile, reste concis et va droit au but. En français.`,
+            `Tu es ${concerned.name}, "${concerned.role}" dans G-Tech HQ. ${chimeOrg}\n\n${chimeMemory}\n\nTu n'as pas été sollicité directement, mais ce qui vient d'être dit dans le projet "${project?.name}" touche à ton domaine (${concerned.title}). Interviens brièvement seulement si tu as un point pertinent — reste concis. En français.`,
             [...history, { role: 'assistant', content: reply }]
           )
           const { data: savedChime } = await supabase.from('messages').insert({
             project_id: id, author_id: concerned.id, author_name: concerned.name, content: chimeIn,
           }).select().single()
           setMessages(prev => [...prev, savedChime])
-        } catch (e) {
-          // pas bloquant si ce second appel échoue
-        }
+        } catch (e) {}
       }
     } catch (e) {
       setMessages(prev => [...prev, { id: 'err-' + Date.now(), author_id: 'system', author_name: 'Système', content: `Erreur : ${e.message}` }])
@@ -116,9 +145,10 @@ export default function ProjectDetail() {
         role: m.author_id === 'user' ? 'user' : 'assistant',
         content: m.content,
       }))
+      const [orgContext, agentMemory] = await Promise.all([getOrgSnapshot(), getAgentMemory(MANAGER.id)])
       const decision = await askAgent(
         MANAGER.engine,
-        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. Le projet "${project?.name}" est en cours. Tu n'attends pas les instructions d'Olivier pour chaque détail : décide toi-même de la prochaine action concrète et utile pour faire avancer le projet vers un résultat livrable, et annonce-la clairement comme une décision déjà prise (pas une question). SEULEMENT si une action nécessite absolument une intervention humaine d'Olivier (un compte à créer, une clé à fournir, un choix stratégique qui t'engage), termine ta réponse par une ligne commençant exactement par "BESOIN_OLIVIER:" suivie d'une phrase courte expliquant quoi. Sinon, ne mets pas cette ligne. Sois concis, direct, en français.`,
+        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\n${agentMemory}\n\nLe projet "${project?.name}" est en cours. Décide toi-même de la prochaine action concrète et utile, annonce-la comme une décision déjà prise. SEULEMENT si une action nécessite absolument Olivier, termine par une ligne "BESOIN_OLIVIER:" suivie d'une phrase courte. Sois concis, en français.`,
         [...history, { role: 'user', content: 'Fais avancer ce projet maintenant.' }]
       )
 
@@ -128,15 +158,11 @@ export default function ProjectDetail() {
       }).select().single()
       setMessages(prev => [...prev, savedReply])
 
-      await supabase.from('activity_log').insert({
-        project_id: id,
-        label: `${MANAGER.name} a fait avancer « ${project.name} »`,
-      })
+      await supabase.from('activity_log').insert({ project_id: id, label: `${MANAGER.name} a fait avancer « ${project.name} »` })
 
       if (needPart && needPart.trim()) {
         await supabase.from('dm_messages').insert({
-          agent_id: MANAGER.id,
-          author_id: MANAGER.id,
+          agent_id: MANAGER.id, author_id: MANAGER.id,
           content: `À propos du projet **${project.name}** : ${needPart.trim()}`,
         })
       }
@@ -147,7 +173,8 @@ export default function ProjectDetail() {
     }
   }
 
-  async function deleteMessage(messageId) {    if (typeof messageId === 'string' && messageId.startsWith('err-')) {
+  async function deleteMessage(messageId) {
+    if (typeof messageId === 'string' && messageId.startsWith('err-')) {
       setMessages(prev => prev.filter(m => m.id !== messageId))
       return
     }
@@ -163,8 +190,32 @@ export default function ProjectDetail() {
       {/* Chat */}
       <div className="flex-1 flex flex-col min-w-0 md:border-r border-[color:var(--color-line)]">
         <div className="px-4 md:px-8 py-4 md:py-5 border-b border-[color:var(--color-line)]">
-          <h1 className="font-display text-xl">{project.name}</h1>
-          <p className="text-xs text-[color:var(--color-mute)] mt-1 capitalize">{project.status.replace('_', ' ')}</p>
+          {editingName ? (
+            <div className="flex items-center gap-2">
+              <input
+                value={nameDraft}
+                onChange={e => setNameDraft(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && saveName()}
+                className="font-display text-xl bg-[color:var(--color-surface)] border border-[color:var(--color-gold-dim)] rounded px-2 py-0.5 flex-1"
+                autoFocus
+              />
+              <button onClick={saveName} className="text-[color:var(--color-gold)]"><Check size={18} /></button>
+            </div>
+          ) : (
+            <h1 className="font-display text-xl flex items-center gap-2 group">
+              {project.name}
+              <button onClick={() => setEditingName(true)} className="opacity-0 group-hover:opacity-100 text-[color:var(--color-mute)] hover:text-[color:var(--color-gold)]">
+                <Pencil size={13} />
+              </button>
+            </h1>
+          )}
+          <select
+            value={project.status}
+            onChange={e => changeStatus(e.target.value)}
+            className="text-xs text-[color:var(--color-mute)] mt-1 bg-transparent outline-none cursor-pointer hover:text-[color:var(--color-gold)]"
+          >
+            {STATUSES.map(s => <option key={s} value={s} className="bg-[color:var(--color-surface)]">{STATUS_LABEL[s]}</option>)}
+          </select>
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 md:py-6 space-y-5">
@@ -182,7 +233,7 @@ export default function ProjectDetail() {
               onChange={e => setRespondent(e.target.value)}
               className="bg-[color:var(--color-surface)] border border-[color:var(--color-line)] rounded-md text-xs px-2 py-1"
             >
-              {LEADERSHIP.map(a => <option key={a.id} value={a.id}>{a.name} — {a.role}</option>)}
+              {respondable.map(a => <option key={a.id} value={a.id}>{a.name} — {a.role}</option>)}
             </select>
           </div>
 
@@ -219,12 +270,12 @@ export default function ProjectDetail() {
         </div>
       </div>
 
-      {/* Aperçu + zone sensible */}
+      {/* Aperçu + panneaux */}
       <div className="hidden md:flex md:flex-col w-80 shrink-0 px-6 py-6 overflow-y-auto">
         <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.15em] text-[color:var(--color-mute)] mb-4">
           <Eye size={13} /> Aperçu du projet
         </div>
-        <div className="border border-dashed border-[color:var(--color-line)] rounded-lg h-48 flex items-center justify-center text-xs text-[color:var(--color-mute)] text-center px-4">
+        <div className="border border-dashed border-[color:var(--color-line)] rounded-lg h-40 flex items-center justify-center text-xs text-[color:var(--color-mute)] text-center px-4">
           L'aperçu apparaîtra ici dès que l'équipe produit un livrable.
         </div>
 
@@ -240,6 +291,7 @@ export default function ProjectDetail() {
           Le Manager décide seul de la prochaine étape. S'il a besoin de toi, il t'écrit en message privé.
         </p>
 
+        <AssignTeamPanel project={project} projectAgents={projectAgents} onUpdate={loadAll} />
         <ProjectFiles project={project} onProjectUpdate={setProject} />
         <DeleteProjectPanel project={project} onProjectUpdate={setProject} />
       </div>

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { askAgent } from '../lib/engines'
+import { getOrgSnapshot } from '../lib/context'
 import { readFileAsText, READABLE_EXT } from '../lib/files'
 import { LEADERSHIP } from '../data/agents'
 import { Sparkles, Paperclip, X } from 'lucide-react'
@@ -55,7 +56,7 @@ export default function NewProject() {
 
       const managerReply = await askAgent(
         MANAGER.engine,
-        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ, l'espace de travail multi-agents d'Olivier. Un nouveau projet vient d'être proposé (éventuellement avec un document joint dont le contenu est inclus). Ton rôle : accueillir l'idée, poser 2-3 questions de clarification précises pour bien cadrer le projet, et proposer un premier avis sur sa faisabilité technique. Réponds comme un collègue de confiance : clair, synthétique, direct, sans blabla. Utilise le markdown seulement si ça aide vraiment. En français.`,
+        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ, l'espace de travail multi-agents d'Olivier. Un nouveau projet vient d'être proposé (éventuellement avec un document joint dont le contenu est inclus).\n\n${await getOrgSnapshot()}\n\nTon rôle : accueillir l'idée, poser 2-3 questions de clarification précises pour bien cadrer le projet, et proposer un premier avis sur sa faisabilité technique. Réponds comme un collègue de confiance : clair, synthétique, direct, sans blabla. En français.`,
         [{ role: 'user', content: fullContent }]
       )
 

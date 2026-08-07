@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { askAgent } from '../lib/engines'
+import { getOrgSnapshot, getAgentMemory } from '../lib/context'
 import { LEADERSHIP } from '../data/agents'
 import AgentAvatar from '../components/AgentAvatar'
 import ReactMarkdown from 'react-markdown'
@@ -42,7 +43,7 @@ export default function Meeting() {
       }))
       const reply = await askAgent(
         agent.engine,
-        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ. C'est l'espace Réunion — la discussion générale de l'organisation, pas liée à un projet précis. Les décisions prises ici orientent tout le reste. Réponds comme un collègue de confiance : clair, synthétique, direct. En français.`,
+        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ. C'est l'espace Réunion — la discussion générale de l'organisation, pas liée à un projet précis. Les décisions prises ici orientent tout le reste.\n\n${await getOrgSnapshot()}\n\n${await getAgentMemory(agent.id, [saved.id])}\n\nRéponds comme un collègue de confiance : clair, synthétique, direct. Ne cite jamais un collègue qui n'existe pas dans le contexte ci-dessus. En français.`,
         history
       )
       const { data: savedReply } = await supabase.from('messages').insert({
