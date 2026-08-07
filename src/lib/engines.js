@@ -89,7 +89,7 @@ async function callXai(systemPrompt, messages) {
       Authorization: `Bearer ${KEYS.xai}`,
     },
     body: JSON.stringify({
-      model: 'grok-4-fast',
+      model: 'grok-4.3',
       messages: [{ role: 'system', content: systemPrompt }, ...messages],
     }),
   })

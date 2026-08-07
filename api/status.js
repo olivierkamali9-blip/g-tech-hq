@@ -43,9 +43,17 @@ async function pingXai() {
   const res = await fetch('https://api.x.ai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.VITE_XAI_API_KEY}` },
-    body: JSON.stringify({ model: 'grok-4-fast', messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }),
+    body: JSON.stringify({ model: 'grok-4.3', messages: [{ role: 'user', content: 'ping' }], max_tokens: 1 }),
   })
   return res.ok
+}
+
+async function checkGithub() {
+  const res = await fetch('https://api.github.com/user', {
+    headers: { Authorization: `token ${process.env.GITHUB_TOKEN}` },
+  })
+  const expiresHeader = res.headers.get('github-authentication-token-expiration')
+  return { ok: res.ok, expiresAt: expiresHeader || null }
 }
 
 const CHECKS = { gemini: pingGemini, groq: pingGroq, mistral: pingMistral, openrouter: pingOpenRouter, xai: pingXai }
@@ -61,5 +69,10 @@ export default async function handler(req, res) {
       }
     })
   )
+  try {
+    results.github = await checkGithub()
+  } catch {
+    results.github = { ok: false, expiresAt: null }
+  }
   return res.status(200).json(results)
 }

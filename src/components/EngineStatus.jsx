@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react'
 import { ENGINE_LABEL } from '../data/agents'
 import { RefreshCw } from 'lucide-react'
 
+function daysUntil(dateStr) {
+  if (!dateStr) return null
+  const diff = new Date(dateStr).getTime() - Date.now()
+  return Math.round(diff / (1000 * 60 * 60 * 24))
+}
+
 export default function EngineStatus() {
   const [status, setStatus] = useState(null)
   const [checking, setChecking] = useState(true)
@@ -20,6 +26,8 @@ export default function EngineStatus() {
   }
 
   useEffect(() => { check() }, [])
+
+  const githubDays = status?.github ? daysUntil(status.github.expiresAt) : null
 
   return (
     <div className="p-5 rounded-lg border border-[color:var(--color-line)] bg-[color:var(--color-surface)]">
@@ -48,6 +56,22 @@ export default function EngineStatus() {
             </div>
           )
         })}
+
+        <div className="pt-1.5 mt-1.5 border-t border-[color:var(--color-line)] flex items-center justify-between text-xs">
+          <span className="text-[color:var(--color-ivory-dim)]">GitHub</span>
+          <span className="flex items-center gap-1.5">
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                status === null ? 'bg-[color:var(--color-mute)]' :
+                status?.github?.ok ? (githubDays !== null && githubDays < 14 ? 'bg-[color:var(--color-warn)]' : 'bg-[color:var(--color-good)]') :
+                'bg-[color:var(--color-danger)]'
+              }`}
+            />
+            <span className="text-[color:var(--color-mute)]">
+              {status === null ? '...' : !status?.github?.ok ? 'Indisponible' : githubDays !== null ? `Expire dans ${githubDays} j` : 'Connecté'}
+            </span>
+          </span>
+        </div>
       </div>
     </div>
   )
