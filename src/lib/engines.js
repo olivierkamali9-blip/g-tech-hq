@@ -15,7 +15,7 @@ async function callGemini(systemPrompt, messages) {
     parts: [{ text: m.content }],
   }))
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${KEYS.gemini}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${KEYS.gemini}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
