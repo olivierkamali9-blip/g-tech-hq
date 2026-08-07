@@ -72,7 +72,7 @@ async function callOpenRouter(systemPrompt, messages) {
       Authorization: `Bearer ${KEYS.openrouter}`,
     },
     body: JSON.stringify({
-      model: 'meta-llama/llama-3.3-70b-instruct:free',
+      model: 'openrouter/free',
       messages: [{ role: 'system', content: systemPrompt }, ...messages],
     }),
   })
