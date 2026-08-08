@@ -186,9 +186,9 @@ export default function ProjectDetail() {
   if (!project) return <div className="p-10 text-sm text-[color:var(--color-mute)]">Chargement...</div>
 
   return (
-    <div className="h-full flex flex-col md:flex-row">
+    <div className="h-full flex flex-col md:flex-row overflow-y-auto md:overflow-hidden">
       {/* Chat */}
-      <div className="flex-1 flex flex-col min-w-0 md:border-r border-[color:var(--color-line)]">
+      <div className="flex flex-col min-w-0 md:flex-1 md:border-r border-[color:var(--color-line)]">
         <div className="px-4 md:px-8 py-4 md:py-5 border-b border-[color:var(--color-line)]">
           {editingName ? (
             <div className="flex items-center gap-2">
@@ -218,7 +218,7 @@ export default function ProjectDetail() {
           </select>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 md:py-6 space-y-5">
+        <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 md:py-6 space-y-5 max-h-[55vh] md:max-h-none">
           {messages.map(m => (
             <MessageBubble key={m.id} message={m} onDelete={() => deleteMessage(m.id)} />
           ))}
@@ -271,7 +271,7 @@ export default function ProjectDetail() {
       </div>
 
       {/* Aperçu + panneaux */}
-      <div className="hidden md:flex md:flex-col w-80 shrink-0 px-6 py-6 overflow-y-auto">
+      <div className="flex flex-col w-full md:w-80 shrink-0 px-4 md:px-6 py-6 overflow-y-auto border-t md:border-t-0 border-[color:var(--color-line)]">
         <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.15em] text-[color:var(--color-mute)] mb-4">
           <Eye size={13} /> Aperçu du projet
         </div>
