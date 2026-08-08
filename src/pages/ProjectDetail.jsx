@@ -14,6 +14,7 @@ import AssignTeamPanel from '../components/AssignTeamPanel'
 import ProjectJournal from '../components/ProjectJournal'
 import DeliveryPanel from '../components/DeliveryPanel'
 import WorkPlanPanel from '../components/WorkPlanPanel'
+import LivePreview from '../components/LivePreview'
 import ReactMarkdown from 'react-markdown'
 import { Send, Eye, Trash2, Paperclip, X, Download, Zap, Pencil, Check } from 'lucide-react'
 
@@ -376,8 +377,8 @@ export default function ProjectDetail() {
         <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.15em] text-[color:var(--color-mute)] mb-4">
           <Eye size={13} /> Aperçu du projet
         </div>
-        <div className="border border-dashed border-[color:var(--color-line)] rounded-lg h-40 flex items-center justify-center text-xs text-[color:var(--color-mute)] text-center px-4">
-          L'aperçu apparaîtra ici dès que l'équipe produit un livrable.
+        <div className="border border-dashed border-[color:var(--color-line)] rounded-lg min-h-40 p-3 text-xs">
+          <LivePreview projectId={project.id} />
         </div>
 
         <button

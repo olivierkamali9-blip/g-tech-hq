@@ -8,6 +8,7 @@ import Team from './pages/Team'
 import Messages from './pages/Messages'
 import Meeting from './pages/Meeting'
 import Calendar from './pages/Calendar'
+import Productivity from './pages/Productivity'
 import PasswordGate from './components/PasswordGate'
 
 export default function App() {
@@ -23,6 +24,7 @@ export default function App() {
             <Route path="messages" element={<Messages />} />
             <Route path="reunion" element={<Meeting />} />
             <Route path="calendrier" element={<Calendar />} />
+            <Route path="productivite" element={<Productivity />} />
             <Route path="equipe" element={<Team />} />
           </Route>
         </Routes>
