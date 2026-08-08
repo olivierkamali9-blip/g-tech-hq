@@ -53,12 +53,22 @@ create table if not exists project_files (
   unique(project_id, path)
 );
 
+create table if not exists org_events (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid references projects(id) on delete cascade,
+  title text not null,
+  event_date date not null,
+  kind text default 'deadline', -- deadline | reunion | livraison | autre
+  created_at timestamptz default now()
+);
+
 alter table projects enable row level security;
 alter table project_agents enable row level security;
 alter table messages enable row level security;
 alter table activity_log enable row level security;
 alter table dm_messages enable row level security;
 alter table project_files enable row level security;
+alter table org_events enable row level security;
 
 do $$ begin
   create policy "allow all - projects" on projects for all using (true) with check (true);
@@ -77,4 +87,7 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 do $$ begin
   create policy "allow all - project_files" on project_files for all using (true) with check (true);
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy "allow all - org_events" on org_events for all using (true) with check (true);
 exception when duplicate_object then null; end $$;

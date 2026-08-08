@@ -9,6 +9,8 @@ import AgentAvatar from '../components/AgentAvatar'
 import DeleteProjectPanel from '../components/DeleteProjectPanel'
 import ProjectFiles from '../components/ProjectFiles'
 import AssignTeamPanel from '../components/AssignTeamPanel'
+import ProjectJournal from '../components/ProjectJournal'
+import DeliveryPanel from '../components/DeliveryPanel'
 import ReactMarkdown from 'react-markdown'
 import { Send, Eye, Trash2, Paperclip, X, Download, Zap, Pencil, Check } from 'lucide-react'
 
@@ -148,11 +150,15 @@ export default function ProjectDetail() {
       const [orgContext, agentMemory] = await Promise.all([getOrgSnapshot(), getAgentMemory(MANAGER.id)])
       const decision = await askAgent(
         MANAGER.engine,
-        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\n${agentMemory}\n\nLe projet "${project?.name}" est en cours. Décide toi-même de la prochaine action concrète et utile, annonce-la comme une décision déjà prise. SEULEMENT si une action nécessite absolument Olivier, termine par une ligne "BESOIN_OLIVIER:" suivie d'une phrase courte. Sois concis, en français.`,
+        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\n${agentMemory}\n\nLe projet "${project?.name}" est en cours. Décide toi-même de la prochaine action concrète et utile, annonce-la comme une décision déjà prise. SEULEMENT si une action nécessite absolument Olivier, termine par une ligne "BESOIN_OLIVIER:" suivie d'une phrase courte. Si une échéance concrète se dégage (deadline, date de livraison), ajoute aussi une ligne "DEADLINE: <titre court> | <date AAAA-MM-JJ>". Sois concis, en français.`,
         [...history, { role: 'user', content: 'Fais avancer ce projet maintenant.' }]
       )
 
-      const [publicPart, needPart] = decision.split(/BESOIN_OLIVIER:/i)
+      const [publicPart, rest] = decision.split(/BESOIN_OLIVIER:/i)
+      const needMatch = rest?.match(/^(.*?)(?:\n?DEADLINE:|$)/is)
+      const needPart = needMatch ? needMatch[1] : rest
+      const deadlineMatch = decision.match(/DEADLINE:\s*(.+?)\s*\|\s*(\d{4}-\d{2}-\d{2})/i)
+
       const { data: savedReply } = await supabase.from('messages').insert({
         project_id: id, author_id: MANAGER.id, author_name: MANAGER.name, content: publicPart.trim(),
       }).select().single()
@@ -164,6 +170,12 @@ export default function ProjectDetail() {
         await supabase.from('dm_messages').insert({
           agent_id: MANAGER.id, author_id: MANAGER.id,
           content: `À propos du projet **${project.name}** : ${needPart.trim()}`,
+        })
+      }
+
+      if (deadlineMatch) {
+        await supabase.from('org_events').insert({
+          project_id: id, title: deadlineMatch[1].trim(), event_date: deadlineMatch[2], kind: 'deadline',
         })
       }
     } catch (e) {
@@ -292,6 +304,8 @@ export default function ProjectDetail() {
         </p>
 
         <AssignTeamPanel project={project} projectAgents={projectAgents} onUpdate={loadAll} />
+        <DeliveryPanel project={project} onProjectUpdate={setProject} />
+        <ProjectJournal projectId={project.id} />
         <ProjectFiles project={project} onProjectUpdate={setProject} />
         <DeleteProjectPanel project={project} onProjectUpdate={setProject} />
       </div>

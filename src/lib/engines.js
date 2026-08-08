@@ -107,15 +107,19 @@ const ENGINES = {
 }
 
 export async function askAgent(engine, systemPrompt, messages) {
-  const fn = ENGINES[engine]
-  if (!fn) throw new Error(`Moteur inconnu: ${engine}`)
-  if (!KEYS[engine]) throw new Error(`Clé API manquante pour ${engine} — vérifie .env.local`)
-  try {
-    return await fn(systemPrompt, messages)
-  } catch (e) {
-    if (String(e.message).toLowerCase().includes('quota') || String(e.message).includes('429')) {
-      throw new Error(`Quota gratuit temporairement atteint sur ${engine}. Réessaie dans une minute, ou choisis un autre agent (moteur différent) pour continuer sans attendre.`)
+  const order = [engine, ...Object.keys(ENGINES).filter(e => e !== engine)]
+  let lastError = null
+  for (const tryEngine of order) {
+    const fn = ENGINES[tryEngine]
+    if (!KEYS[tryEngine]) continue
+    try {
+      return await fn(systemPrompt, messages)
+    } catch (e) {
+      lastError = e
+      const isQuota = String(e.message).toLowerCase().includes('quota') || String(e.message).includes('429')
+      if (!isQuota) throw e // erreur non liée au quota : pas la peine d'essayer un autre moteur
+      // sinon on continue silencieusement vers le moteur suivant
     }
-    throw e
   }
+  throw new Error(`Tous les moteurs gratuits sont indisponibles pour l'instant (${lastError?.message || 'erreur inconnue'}). Réessaie dans quelques minutes.`)
 }
