@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
 import { ALL_AGENTS } from '../data/agents'
+import { fetchDynamicAgents } from './dynamicAgents'
 
 const STATUS_LABEL = {
   idee: 'idée',
@@ -12,16 +13,18 @@ const STATUS_LABEL = {
 // Vue d'ensemble de l'organisation : équipe réelle, projets réels, dernières décisions.
 // Injecté dans CHAQUE appel à un agent pour qu'il ne parle jamais dans le vide.
 export async function getOrgSnapshot() {
-  const [{ data: projects }, { data: activity }] = await Promise.all([
+  const [{ data: projects }, { data: activity }, dynamicAgents] = await Promise.all([
     supabase.from('projects').select('id, name, status, lead_agent_id').order('created_at', { ascending: false }).limit(20),
     supabase.from('activity_log').select('label, created_at').order('created_at', { ascending: false }).limit(10),
+    fetchDynamicAgents(),
   ])
 
-  const teamList = ALL_AGENTS.map(a => `- ${a.name} (${a.role})${a.tier === 'pool' ? ' — réservoir, à assigner' : ' — direction'}`).join('\n')
+  const allKnownAgents = [...ALL_AGENTS, ...dynamicAgents]
+  const teamList = allKnownAgents.map(a => `- ${a.name} (${a.role})${a.tier === 'pool' ? ' — réservoir, à assigner' : ' — direction'}`).join('\n')
 
   const projectsList = (projects || []).length
     ? projects.map(p => {
-        const lead = ALL_AGENTS.find(a => a.id === p.lead_agent_id)
+        const lead = allKnownAgents.find(a => a.id === p.lead_agent_id)
         return `- « ${p.name} » — statut : ${STATUS_LABEL[p.status] || p.status}${lead ? `, chef de projet : ${lead.name}` : ''}`
       }).join('\n')
     : "Aucun projet pour l'instant."

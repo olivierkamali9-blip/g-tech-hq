@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { askAgent } from '../lib/engines'
 import { getOrgSnapshot } from '../lib/context'
+import { fetchDynamicAgents } from '../lib/dynamicAgents'
 import { POOL, LEADERSHIP, ALL_AGENTS } from '../data/agents'
 import AgentAvatar from '../components/AgentAvatar'
 import { Users, Star, X, Wand2, Loader2 } from 'lucide-react'
@@ -10,9 +11,19 @@ const MANAGER = LEADERSHIP.find(a => a.id === 'manager')
 
 export default function AssignTeamPanel({ project, projectAgents, onUpdate }) {
   const [asking, setAsking] = useState(false)
+  const [dynamicAgents, setDynamicAgents] = useState([])
+
+  useEffect(() => { fetchDynamicAgents().then(setDynamicAgents) }, [projectAgents])
+
+  const allPoolAgents = [...POOL, ...dynamicAgents]
   const assignedIds = projectAgents.map(pa => pa.agent_id)
-  const assigned = POOL.filter(a => assignedIds.includes(a.id))
-  const lead = ALL_AGENTS.find(a => a.id === project.lead_agent_id)
+  const assigned = allPoolAgents.filter(a => assignedIds.includes(a.id))
+  const allKnown = [...ALL_AGENTS, ...dynamicAgents]
+  const lead = allKnown.find(a => a.id === project.lead_agent_id)
+
+  function roleOf(agentId) {
+    return projectAgents.find(pa => pa.agent_id === agentId)?.role_in_project
+  }
 
   async function toggleAgent(agentId) {
     if (assignedIds.includes(agentId)) {
@@ -32,27 +43,29 @@ export default function AssignTeamPanel({ project, projectAgents, onUpdate }) {
     setAsking(true)
     try {
       const orgContext = await getOrgSnapshot()
-      const poolList = POOL.map(a => `${a.id} = ${a.name} (${a.role})`).join('\n')
+      const poolList = allPoolAgents.map(a => `${a.id} = ${a.name} (${a.role} — ${a.title})`).join('\n')
       const raw = await askAgent(
         MANAGER.engine,
-        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\nConstitue l'équipe pour le projet "${project.name}" (description : ${project.description}). Voici les agents disponibles dans le réservoir, avec leurs identifiants exacts :\n${poolList}\n\nRéponds UNIQUEMENT avec ce format exact, rien d'autre, pas de phrase avant ou après :\nCHEF: <id de l'agent chef de projet>\nEQUIPE: <id1>, <id2>, <id3>`,
-        [{ role: 'user', content: 'Constitue l\'équipe maintenant.' }]
+        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\nConstitue l'équipe pour le projet "${project.name}" (description : ${project.description}). Voici les agents disponibles dans le réservoir, avec leurs identifiants exacts :\n${poolList}\n\nRègle stricte : choisis SEULEMENT les agents dont la compétence est réellement nécessaire pour CE projet précis — pas toute l'équipe par défaut. La plupart des projets n'ont besoin que de 2 à 4 agents. Justifie mentalement chaque choix par la compétence requise avant de répondre.\n\nRéponds UNIQUEMENT avec ce format exact, une ligne EQUIPE par agent choisi, rien d'autre :\nCHEF: <id de l'agent chef de projet>\nEQUIPE: <id> | <rôle précis de cet agent dans CE projet en une courte phrase>\nEQUIPE: <id> | <rôle précis de cet agent dans CE projet en une courte phrase>`,
+        [{ role: 'user', content: 'Constitue l\'équipe maintenant, uniquement les agents nécessaires.' }]
       )
       const chefMatch = raw.match(/CHEF:\s*([a-z0-9-]+)/i)
-      const equipeMatch = raw.match(/EQUIPE:\s*(.+)/i)
       const chefId = chefMatch?.[1]?.trim()
-      const equipeIds = equipeMatch?.[1]?.split(',').map(s => s.trim()).filter(id => POOL.some(a => a.id === id)) || []
+      const equipeLines = [...raw.matchAll(/EQUIPE:\s*([a-z0-9-]+)\s*\|\s*(.+)/gi)]
+      const equipe = equipeLines
+        .map(m => ({ agent_id: m[1].trim(), role_in_project: m[2].trim() }))
+        .filter(e => allPoolAgents.some(a => a.id === e.agent_id))
 
-      if (equipeIds.length > 0) {
+      if (equipe.length > 0) {
         await supabase.from('project_agents').delete().eq('project_id', project.id)
-        await supabase.from('project_agents').insert(equipeIds.map(agent_id => ({ project_id: project.id, agent_id })))
+        await supabase.from('project_agents').insert(equipe.map(e => ({ project_id: project.id, ...e })))
       }
-      if (chefId && POOL.some(a => a.id === chefId)) {
+      if (chefId && allPoolAgents.some(a => a.id === chefId)) {
         await supabase.from('projects').update({ lead_agent_id: chefId }).eq('id', project.id)
       }
       await supabase.from('activity_log').insert({
         project_id: project.id,
-        label: `${MANAGER.name} a constitué l'équipe de « ${project.name} »`,
+        label: `${MANAGER.name} a constitué l'équipe de « ${project.name} » (${equipe.length} agent${equipe.length > 1 ? 's' : ''})`,
       })
       onUpdate()
     } catch (e) {
@@ -71,22 +84,27 @@ export default function AssignTeamPanel({ project, projectAgents, onUpdate }) {
       {assigned.length === 0 ? (
         <p className="text-xs text-[color:var(--color-mute)] mb-3">Personne d'assigné pour l'instant.</p>
       ) : (
-        <div className="space-y-1.5 mb-3">
+        <div className="space-y-2 mb-3">
           {assigned.map(a => (
-            <div key={a.id} className="flex items-center justify-between text-xs px-2 py-1.5 rounded-md hover:bg-[color:var(--color-surface)] group">
-              <div className="flex items-center gap-2">
-                <AgentAvatar agent={a} size="sm" />
-                <span>{a.name}</span>
-                {lead?.id === a.id && <span className="text-[color:var(--color-gold)] text-[10px]">Chef de projet</span>}
+            <div key={a.id} className="px-2 py-1.5 rounded-md hover:bg-[color:var(--color-surface)] group">
+              <div className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <AgentAvatar agent={a} size="sm" />
+                  <span>{a.name}</span>
+                  {lead?.id === a.id && <span className="text-[color:var(--color-gold)] text-[10px]">Chef de projet</span>}
+                </div>
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                  <button onClick={() => setLead(a.id)} title="Désigner chef de projet" className="text-[color:var(--color-mute)] hover:text-[color:var(--color-gold)]">
+                    <Star size={12} fill={lead?.id === a.id ? 'currentColor' : 'none'} />
+                  </button>
+                  <button onClick={() => toggleAgent(a.id)} title="Retirer" className="text-[color:var(--color-mute)] hover:text-[color:var(--color-danger)]">
+                    <X size={12} />
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
-                <button onClick={() => setLead(a.id)} title="Désigner chef de projet" className="text-[color:var(--color-mute)] hover:text-[color:var(--color-gold)]">
-                  <Star size={12} fill={lead?.id === a.id ? 'currentColor' : 'none'} />
-                </button>
-                <button onClick={() => toggleAgent(a.id)} title="Retirer" className="text-[color:var(--color-mute)] hover:text-[color:var(--color-danger)]">
-                  <X size={12} />
-                </button>
-              </div>
+              {roleOf(a.id) && (
+                <p className="text-[10px] text-[color:var(--color-mute)] mt-0.5 pl-7">{roleOf(a.id)}</p>
+              )}
             </div>
           ))}
         </div>
@@ -95,7 +113,7 @@ export default function AssignTeamPanel({ project, projectAgents, onUpdate }) {
       <details className="mb-3">
         <summary className="text-xs text-[color:var(--color-mute)] cursor-pointer hover:text-[color:var(--color-gold)]">+ Ajouter manuellement</summary>
         <div className="mt-2 space-y-1">
-          {POOL.filter(a => !assignedIds.includes(a.id)).map(a => (
+          {allPoolAgents.filter(a => !assignedIds.includes(a.id)).map(a => (
             <button
               key={a.id}
               onClick={() => toggleAgent(a.id)}

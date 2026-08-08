@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { askAgent } from '../lib/engines'
 import { getOrgSnapshot, getAgentMemory } from '../lib/context'
+import { fetchDynamicAgents } from '../lib/dynamicAgents'
 import { readFileAsText, downloadTextFile, READABLE_EXT } from '../lib/files'
 import { ALL_AGENTS, LEADERSHIP, POOL } from '../data/agents'
 import AgentAvatar from '../components/AgentAvatar'
@@ -31,6 +32,7 @@ export default function ProjectDetail() {
   const [project, setProject] = useState(null)
   const [messages, setMessages] = useState([])
   const [projectAgents, setProjectAgents] = useState([]) // [{agent_id, role_in_project}]
+  const [dynamicAgents, setDynamicAgents] = useState([])
   const [input, setInput] = useState('')
   const [attachment, setAttachment] = useState(null)
   const [respondent, setRespondent] = useState('manager')
@@ -41,14 +43,16 @@ export default function ProjectDetail() {
   const bottomRef = useRef(null)
 
   async function loadAll() {
-    const [{ data: p }, { data: m }, { data: pa }] = await Promise.all([
+    const [{ data: p }, { data: m }, { data: pa }, dyn] = await Promise.all([
       supabase.from('projects').select('*').eq('id', id).single(),
       supabase.from('messages').select('*').eq('project_id', id).order('created_at', { ascending: true }),
       supabase.from('project_agents').select('*').eq('project_id', id),
+      fetchDynamicAgents(),
     ])
     setProject(p)
     setMessages(m || [])
     setProjectAgents(pa || [])
+    setDynamicAgents(dyn)
     if (p) setNameDraft(p.name)
   }
 
@@ -58,10 +62,12 @@ export default function ProjectDetail() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  const allKnown = [...ALL_AGENTS, ...dynamicAgents]
+
   // Qui peut répondre : la Direction + les agents réellement assignés à ce projet
   const respondable = [
     ...LEADERSHIP,
-    ...POOL.filter(a => projectAgents.some(pa => pa.agent_id === a.id)),
+    ...[...POOL, ...dynamicAgents].filter(a => projectAgents.some(pa => pa.agent_id === a.id)),
   ]
 
   async function handleFile(e) {
@@ -101,7 +107,7 @@ export default function ProjectDetail() {
     setMessages(prev => [...prev, saved])
 
     try {
-      const agent = ALL_AGENTS.find(a => a.id === respondent)
+      const agent = allKnown.find(a => a.id === respondent)
       const history = [...messages, saved].map(m => ({
         role: m.author_id === 'user' ? 'user' : 'assistant',
         content: m.content,
@@ -232,7 +238,7 @@ export default function ProjectDetail() {
 
         <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 md:py-6 space-y-5 max-h-[55vh] md:max-h-none">
           {messages.map(m => (
-            <MessageBubble key={m.id} message={m} onDelete={() => deleteMessage(m.id)} />
+            <MessageBubble key={m.id} message={m} agents={allKnown} onDelete={() => deleteMessage(m.id)} />
           ))}
           <div ref={bottomRef} />
         </div>
@@ -313,9 +319,9 @@ export default function ProjectDetail() {
   )
 }
 
-function MessageBubble({ message, onDelete }) {
+function MessageBubble({ message, agents, onDelete }) {
   const isUser = message.author_id === 'user'
-  const agent = ALL_AGENTS.find(a => a.id === message.author_id)
+  const agent = agents.find(a => a.id === message.author_id)
 
   return (
     <div className={`flex gap-3 group ${isUser ? 'flex-row-reverse' : ''}`}>

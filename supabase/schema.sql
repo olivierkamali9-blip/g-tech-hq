@@ -62,6 +62,15 @@ create table if not exists org_events (
   created_at timestamptz default now()
 );
 
+create table if not exists custom_agents (
+  id text primary key,
+  name text not null unique,
+  role text not null,
+  title text not null,
+  engine text not null default 'gemini',
+  created_at timestamptz default now()
+);
+
 alter table projects enable row level security;
 alter table project_agents enable row level security;
 alter table messages enable row level security;
@@ -69,6 +78,7 @@ alter table activity_log enable row level security;
 alter table dm_messages enable row level security;
 alter table project_files enable row level security;
 alter table org_events enable row level security;
+alter table custom_agents enable row level security;
 
 do $$ begin
   create policy "allow all - projects" on projects for all using (true) with check (true);
@@ -90,4 +100,7 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 do $$ begin
   create policy "allow all - org_events" on org_events for all using (true) with check (true);
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy "allow all - custom_agents" on custom_agents for all using (true) with check (true);
 exception when duplicate_object then null; end $$;
