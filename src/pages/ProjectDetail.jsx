@@ -87,21 +87,26 @@ export default function ProjectDetail() {
     return `ÉQUIPE ASSIGNÉE À CE PROJET PRÉCIS (les seuls agents censés y travailler activement) :\n${leadLine}\n${members.length ? 'MEMBRES SOUS SA SUPERVISION :\n' + members.join('\n') : ''}`
   }
 
-  async function projectRealityText() {
-    const [{ data: files }, { data: doneTasks }] = await Promise.all([
-      supabase.from('project_files').select('path').eq('project_id', id).order('path'),
-      supabase.from('project_tasks').select('description, status').eq('project_id', id).order('sequence'),
+  async function projectRealityText(forAgentId) {
+    const [{ data: files }, { data: allTasks }] = await Promise.all([
+      supabase.from('project_files').select('path, agent_id').eq('project_id', id).order('path'),
+      supabase.from('project_tasks').select('agent_id, description, status').eq('project_id', id).order('sequence'),
     ])
-    const filesText = (files || []).length
-      ? (files || []).map(f => f.path).join(', ')
-      : "AUCUN fichier n'existe encore réellement dans ce projet."
-    const tasksText = (doneTasks || []).length
-      ? (doneTasks || []).map(t => `[${t.status}] ${t.description}`).join(' | ')
-      : "Aucune tâche n'a encore été exécutée."
+    const myFiles = (files || []).filter(f => f.agent_id === forAgentId).map(f => f.path)
+    const otherFiles = (files || []).filter(f => f.agent_id !== forAgentId).map(f => f.path)
+    const myTasks = (allTasks || []).filter(t => t.agent_id === forAgentId)
+    const otherDoneTasks = (allTasks || []).filter(t => t.agent_id !== forAgentId && t.status === 'done')
+
     const repoText = project.github_repo
       ? `Repo GitHub réel : github.com/olivierkamali9-blip/${project.github_repo}`
       : "AUCUN repo GitHub n'existe encore pour ce projet."
-    return `--- ÉTAT RÉEL DU PROJET (vérité absolue — ne dis JAMAIS avoir fait quelque chose qui n'est pas listé ici) ---\nFICHIERS QUI EXISTENT VRAIMENT : ${filesText}\n${repoText}\nTÂCHES : ${tasksText}\nSi on te demande ce qui a été fait et que ce n'est pas ci-dessus, dis honnêtement que ce n'est pas encore fait.\n--- FIN ÉTAT RÉEL ---`
+
+    return `--- ÉTAT RÉEL DU PROJET (vérité absolue — ne dis JAMAIS avoir fait quelque chose que TOI n'as pas fait) ---
+${repoText}
+CE QUE TOI PRÉCISÉMENT AS RÉELLEMENT FAIT : ${myFiles.length ? myFiles.join(', ') : "RIEN encore — si on te demande ce que tu as fait, dis honnêtement que tu n'as encore rien produit."}
+TES TÂCHES À TOI : ${myTasks.length ? myTasks.map(t => `[${t.status}] ${t.description}`).join(' | ') : "Aucune tâche ne t'a été assignée sur ce projet pour l'instant — dis-le clairement si on te le demande, ne réponds pas comme si tu avais travaillé."}
+CE QUE LE RESTE DE L'ÉQUIPE A FAIT (pas toi — n'en prends jamais le crédit) : ${otherFiles.length ? otherFiles.join(', ') : 'rien encore'}${otherDoneTasks.length ? ' | tâches faites par d\'autres : ' + otherDoneTasks.map(t => t.description).join(', ') : ''}
+--- FIN ÉTAT RÉEL ---`
   }
 
   // Qui peut répondre : la Direction + les agents réellement assignés à ce projet
@@ -153,10 +158,10 @@ export default function ProjectDetail() {
     } catch (e) {}
   }
 
-  async function autoSaveAndPublish(files) {
+  async function autoSaveAndPublish(files, agentId) {
     if (files.length === 0) return
     for (const f of files) {
-      await supabase.from('project_files').upsert({ project_id: id, path: f.path, content: f.content }, { onConflict: 'project_id,path' })
+      await supabase.from('project_files').upsert({ project_id: id, path: f.path, content: f.content, agent_id: agentId }, { onConflict: 'project_id,path' })
     }
     const repoName = project.github_repo || slugify(project.name)
     try {
@@ -196,19 +201,33 @@ export default function ProjectDetail() {
         role: m.author_id === 'user' ? 'user' : 'assistant',
         content: m.content,
       }))
-      const [orgContext, agentMemory, realityText] = await Promise.all([getOrgSnapshot(), getAgentMemory(agent.id), projectRealityText()])
+      const [orgContext, agentMemory, realityText] = await Promise.all([getOrgSnapshot(), getAgentMemory(agent.id), projectRealityText(agent.id)])
+      const managerTaskInstruction = agent.id === 'manager'
+        ? `\n\nTu es aussi responsable de suivre cette discussion : si Olivier valide clairement une nouvelle idée, un ajout ou une modification cohérente avec le projet, traduis-la en tâche(s) concrète(s) pour l'équipe en ajoutant, à la fin de ta réponse, une ou plusieurs lignes "NOUVELLE_TACHE: <id agent> | <description courte>" (elles seront ajoutées automatiquement au plan de travail). Ne le fais QUE si c'est vraiment validé/clair dans cet échange, pas sur une simple suggestion floue.`
+        : ''
       const reply = await askAgent(
         agent.engine,
-        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ, l'espace de travail multi-agents d'Olivier. Ton rôle : ${agent.title}.\n\n${orgContext}\n\n${projectTeamText()}\n\n${realityText}\n\n${agentMemory}\n\nLe projet en cours s'appelle "${project?.name}". Ne parle QUE de ce qui relève de ton rôle ; si une question dépasse ton domaine, dis que c'est à un autre membre de l'ÉQUIPE DE CE PROJET de répondre (nomme-le). Ne connais et ne cite jamais un collègue qui n'est pas listé dans le contexte ci-dessus — s'inventer un nom est une faute grave.\n\nSi une décision de style, couleur, interface ou fonctionnalité est ambiguë et pas encore précisée par Olivier, NE DÉCIDE PAS seul — pose la question via "BESOIN_OLIVIER:" plutôt que d'inventer un choix.\n\nSi tu écris du code, structure le projet PROFESSIONNELLEMENT comme un vrai projet tech (une seule arborescence cohérente, dossiers src/, un vrai README.md décrivant le projet — jamais la phrase brute d'Olivier recopiée telle quelle, package.json si pertinent). Utilise EXACTEMENT ce format pour chaque fichier :\nFICHIER: chemin/du/fichier.ext\n\`\`\`langage\ncontenu complet du fichier\n\`\`\`\nIMPORTANT : dans ta réponse visible (en dehors des blocs FICHIER), ne recopie JAMAIS le code ni son contenu — Olivier ne veut pas le voir défiler dans le chat, seulement sur GitHub. Dis juste en une phrase ce que tu as fait. Tu n'es pas obligé d'utiliser Supabase/Vercel par défaut — propose la meilleure architecture selon le projet. Si une action nécessite qu'Olivier fasse quelque chose lui-même, termine ta réponse par une ligne "BESOIN_OLIVIER:" suivie des étapes précises numérotées. Si Olivier te demande un document, rédige-le entièrement en markdown.`,
+        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ, l'espace de travail multi-agents d'Olivier. Ton rôle : ${agent.title}.\n\n${orgContext}\n\n${projectTeamText()}\n\n${realityText}\n\n${agentMemory}\n\nLe projet en cours s'appelle "${project?.name}". Ne parle QUE de ce qui relève de ton rôle ; si une question dépasse ton domaine, dis que c'est à un autre membre de l'ÉQUIPE DE CE PROJET de répondre (nomme-le). Ne connais et ne cite jamais un collègue qui n'est pas listé dans le contexte ci-dessus — s'inventer un nom est une faute grave.\n\nSi une décision de style, couleur, interface ou fonctionnalité est ambiguë et pas encore précisée par Olivier, NE DÉCIDE PAS seul — pose la question via "BESOIN_OLIVIER:" plutôt que d'inventer un choix.${managerTaskInstruction}\n\nSi tu écris du code, structure le projet PROFESSIONNELLEMENT comme un vrai projet tech (une seule arborescence cohérente, dossiers src/, un vrai README.md décrivant le projet — jamais la phrase brute d'Olivier recopiée telle quelle, package.json si pertinent). Utilise EXACTEMENT ce format pour chaque fichier :\nFICHIER: chemin/du/fichier.ext\n\`\`\`langage\ncontenu complet du fichier\n\`\`\`\nIMPORTANT : dans ta réponse visible (en dehors des blocs FICHIER et NOUVELLE_TACHE), ne recopie JAMAIS le code ni son contenu — Olivier ne veut pas le voir défiler dans le chat, seulement sur GitHub. Dis juste en une phrase ce que tu as fait. Tu n'es pas obligé d'utiliser Supabase/Vercel par défaut — propose la meilleure architecture selon le projet. Si une action nécessite qu'Olivier fasse quelque chose lui-même, termine ta réponse par une ligne "BESOIN_OLIVIER:" suivie des étapes précises numérotées. Si Olivier te demande un document, rédige-le entièrement en markdown.`,
         history
       )
       const [visiblePart, needRaw] = reply.split(/BESOIN_OLIVIER:/i)
-      const agentMsg = { project_id: id, author_id: agent.id, author_name: agent.name, content: stripFileBlocks(visiblePart.trim()) }
+      const cleanVisible = visiblePart.replace(/NOUVELLE_TACHE:.*$/gim, '').trim()
+      const agentMsg = { project_id: id, author_id: agent.id, author_name: agent.name, content: stripFileBlocks(cleanVisible) }
       const { data: savedReply } = await supabase.from('messages').insert(agentMsg).select().single()
       setMessages(prev => [...prev, savedReply])
 
       const files = extractFilesFromMessage(reply)
-      if (files.length > 0) await autoSaveAndPublish(files)
+      if (files.length > 0) await autoSaveAndPublish(files, agent.id)
+
+      if (agent.id === 'manager') {
+        const newTaskLines = [...reply.matchAll(/NOUVELLE_TACHE:\s*([a-z0-9-]+)\s*\|\s*(.+)/gi)]
+        if (newTaskLines.length > 0) {
+          const { count: existingCount } = await supabase.from('project_tasks').select('id', { count: 'exact', head: true }).eq('project_id', id)
+          const newTasks = newTaskLines.map((m, i) => ({ project_id: id, agent_id: m[1].trim(), description: m[2].trim(), sequence: (existingCount || 0) + i }))
+          await supabase.from('project_tasks').insert(newTasks)
+          await supabase.from('activity_log').insert({ project_id: id, label: `${agent.name} a ajouté ${newTasks.length} tâche(s) suite à la discussion` })
+        }
+      }
 
       if (needRaw && needRaw.trim()) {
         await supabase.from('dm_messages').insert({
@@ -221,7 +240,7 @@ export default function ProjectDetail() {
       if (concernedId && concernedId !== agent.id) {
         const concerned = LEADERSHIP.find(a => a.id === concernedId)
         try {
-          const [chimeOrg, chimeMemory, chimeReality] = await Promise.all([getOrgSnapshot(), getAgentMemory(concerned.id), projectRealityText()])
+          const [chimeOrg, chimeMemory, chimeReality] = await Promise.all([getOrgSnapshot(), getAgentMemory(concerned.id), projectRealityText(concerned.id)])
           const chimeIn = await askAgent(
             concerned.engine,
             `Tu es ${concerned.name}, "${concerned.role}" dans G-Tech HQ. ${chimeOrg}\n\n${projectTeamText()}\n\n${chimeReality}\n\n${chimeMemory}\n\nTu n'as pas été sollicité directement, mais ce qui vient d'être dit dans le projet "${project?.name}" touche à ton domaine (${concerned.title}). Interviens brièvement seulement si tu as un point pertinent — reste concis. En français.`,
@@ -248,7 +267,7 @@ export default function ProjectDetail() {
         role: m.author_id === 'user' ? 'user' : 'assistant',
         content: m.content,
       }))
-      const [orgContext, agentMemory, realityText] = await Promise.all([getOrgSnapshot(), getAgentMemory(MANAGER.id), projectRealityText()])
+      const [orgContext, agentMemory, realityText] = await Promise.all([getOrgSnapshot(), getAgentMemory(MANAGER.id), projectRealityText(MANAGER.id)])
       const decision = await askAgent(
         MANAGER.engine,
         `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\n${projectTeamText()}\n\n${realityText}\n\n${agentMemory}\n\nLe projet "${project?.name}" est en cours. IMPORTANT : tu ne peux QUE toi-même agir maintenant (les autres agents de l'équipe ne travaillent pas en arrière-plan, ils n'agissent que quand Olivier leur écrit directement). Donc soit tu fais toi-même une action concrète MAINTENANT (écrire un fichier, une décision, un document), soit tu dis clairement à Olivier quel agent il doit aller solliciter et pourquoi — ne prétends jamais qu'un autre agent est "en train de" faire quelque chose s'il n'a pas été sollicité, et ne prétends jamais qu'un fichier existe s'il n'est pas dans l'état réel ci-dessus. Si tu écris du code, structure-le professionnellement et utilise EXACTEMENT ce format par fichier :\nFICHIER: chemin/du/fichier.ext\n\`\`\`langage\ncontenu complet\n\`\`\`\nNe recopie jamais le code dans ta réponse visible en dehors de ce format. SEULEMENT si une action nécessite absolument Olivier (compte à créer, SQL à coller...), termine par "BESOIN_OLIVIER:" suivi des étapes précises numérotées. Si une échéance concrète se dégage, ajoute une ligne "DEADLINE: <titre court> | <date AAAA-MM-JJ>". Sois concis, en français.`,
@@ -266,7 +285,7 @@ export default function ProjectDetail() {
       setMessages(prev => [...prev, savedReply])
 
       const files = extractFilesFromMessage(decision)
-      if (files.length > 0) await autoSaveAndPublish(files)
+      if (files.length > 0) await autoSaveAndPublish(files, MANAGER.id)
 
       await supabase.from('activity_log').insert({ project_id: id, label: `${MANAGER.name} a fait avancer « ${project.name} »` })
 

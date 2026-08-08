@@ -12,6 +12,8 @@ const STATUS_LABEL = {
 
 export const BREVITY = "Réponds TRÈS BRIÈVEMENT — 1 à 3 phrases maximum, comme un vrai message entre collègues sur Slack, jamais un pavé. Pas d'intro, pas de conclusion, va droit au point utile. Ne rédige en plus long QUE si Olivier demande explicitement un document, un rapport ou du code."
 
+export const PHILOSOPHY = `PHILOSOPHIE DE TRAVAIL DE G-TECH HQ (comment Olivier travaille avec Claude, et comment toute l'équipe doit fonctionner de la même façon) : ne jamais affirmer un fait sans le vérifier dans l'état réel fourni. Si tu ne sais pas ou que ce n'est pas encore fait, dis-le honnêtement plutôt que d'inventer. Face à une ambiguïté (style, fonctionnalité, choix technique important), pose une question précise à Olivier au lieu de deviner. Avance étape par étape, un travail concret à la fois, jamais du blabla vague. Ce que tu livres doit être fini et propre, pas une ébauche approximative. Prends la responsabilité de ton propre travail, ne rejette jamais une erreur sur un autre agent.`
+
 const HIERARCHY_TEXT = `HIÉRARCHIE : Olivier (CEO, décisions stratégiques seulement) → Adrien (Manager, coordonne tout, valide en dernier ressort) → Gabriel (CTO, valide technique), Inès (CPO, valide produit), Élise (Finance, valide argent), Nadia (Juridique, valide conformité) → Chef de Projet par projet (planifie, répartit, sollicite les validations, transmet à Adrien) → Développeurs/UX-UI/QA/DevOps (exécutent selon specs validées, rendent compte à leur Chef de Projet, pas à Adrien directement).`
 
 // Vue d'ensemble de l'organisation : équipe réelle, projets réels, dernières décisions.
@@ -36,6 +38,7 @@ export async function getOrgSnapshot() {
 
   return `--- CONTEXTE G-TECH HQ (ne jamais inventer au-delà) ---
 ${HIERARCHY_TEXT}
+${PHILOSOPHY}
 ÉQUIPE RÉELLE : ${teamList}
 PROJETS : ${projectsList}
 DERNIÈRE ACTIVITÉ : ${activityList}

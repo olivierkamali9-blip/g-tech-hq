@@ -25,6 +25,7 @@ const POOL = [
 ]
 
 const HIERARCHY_TEXT = `HIÉRARCHIE : Olivier (CEO) → Adrien (Manager) → Gabriel(CTO)/Inès(CPO)/Élise(Finance)/Nadia(Juridique) → Chef de Projet par projet → Développeurs/UX-UI/QA/DevOps (rendent compte à leur Chef de Projet).`
+const PHILOSOPHY = `PHILOSOPHIE : ne jamais affirmer un fait sans le vérifier dans l'état réel fourni. Si tu ne sais pas, dis-le honnêtement plutôt que d'inventer. Face à une ambiguïté (style, fonctionnalité), pose une question précise via BESOIN_OLIVIER au lieu de deviner. Ce que tu livres doit être fini et propre. Prends la responsabilité de ton travail, ne rejette jamais une erreur sur un autre agent.`
 const BREVITY = "Réponds BRIÈVEMENT (2-5 phrases hors code), comme un message entre collègues, jamais un pavé."
 
 const KEYS = {
@@ -151,18 +152,21 @@ async function buildContext(projectId) {
     : "Aucun chef de projet désigné."
 
   const [{ data: files }, { data: allTasks }] = await Promise.all([
-    supabase.from('project_files').select('path').eq('project_id', projectId).order('path'),
-    supabase.from('project_tasks').select('description, status').eq('project_id', projectId).order('sequence'),
+    supabase.from('project_files').select('path, agent_id').eq('project_id', projectId).order('path'),
+    supabase.from('project_tasks').select('agent_id, description, status').eq('project_id', projectId).order('sequence'),
   ])
-  const filesText = (files || []).length ? files.map(f => f.path).join(', ') : "AUCUN fichier n'existe encore."
-  const tasksText = (allTasks || []).length ? allTasks.map(t => `[${t.status}] ${t.description}`).join(' | ') : 'aucune tâche encore.'
-  const repoText = project?.github_repo ? `Repo GitHub réel : github.com/olivierkamali9-blip/${project.github_repo}` : "AUCUN repo GitHub n'existe encore."
-  const realityText = `--- ÉTAT RÉEL DU PROJET (vérité absolue) ---\nFICHIERS RÉELS : ${filesText}\n${repoText}\nTÂCHES : ${tasksText}\nNe prétends jamais avoir fait quelque chose qui n'est pas listé ici.\n--- FIN ---`
+  function realityFor(forAgentId) {
+    const myFiles = (files || []).filter(f => f.agent_id === forAgentId).map(f => f.path)
+    const otherFiles = (files || []).filter(f => f.agent_id !== forAgentId).map(f => f.path)
+    const myTasks = (allTasks || []).filter(t => t.agent_id === forAgentId)
+    const repoText = project?.github_repo ? `Repo GitHub réel : github.com/olivierkamali9-blip/${project.github_repo}` : "AUCUN repo GitHub n'existe encore."
+    return `--- ÉTAT RÉEL DU PROJET (vérité absolue) ---\n${repoText}\nCE QUE TOI PRÉCISÉMENT AS FAIT : ${myFiles.length ? myFiles.join(', ') : "RIEN encore — dis-le honnêtement si on te le demande."}\nTES TÂCHES À TOI : ${myTasks.length ? myTasks.map(t => `[${t.status}] ${t.description}`).join(' | ') : 'aucune tâche ne t\'a été assignée.'}\nCE QUE LE RESTE DE L'ÉQUIPE A FAIT (pas toi) : ${otherFiles.length ? otherFiles.join(', ') : 'rien encore'}\n--- FIN ---`
+  }
 
   return {
     allKnown, project,
-    orgText: `--- CONTEXTE G-TECH HQ ---\n${HIERARCHY_TEXT}\nÉQUIPE : ${teamList}\nPROJETS : ${projectsList}\nACTIVITÉ RÉCENTE : ${activityList}\n${BREVITY}\n--- FIN ---`,
-    teamText, realityText,
+    orgText: `--- CONTEXTE G-TECH HQ ---\n${HIERARCHY_TEXT}\n${PHILOSOPHY}\nÉQUIPE : ${teamList}\nPROJETS : ${projectsList}\nACTIVITÉ RÉCENTE : ${activityList}\n${BREVITY}\n--- FIN ---`,
+    teamText, realityFor,
   }
 }
 
@@ -188,14 +192,14 @@ export default async function handler(req, res) {
     await supabase.from('project_tasks').update({ status: 'in_progress', updated_at: new Date().toISOString() }).eq('id', task.id)
 
     const project = task.projects
-    const { orgText, teamText, realityText, allKnown } = await buildContext(project.id)
+    const { orgText, teamText, realityFor, allKnown } = await buildContext(project.id)
     const agent = allKnown.find(a => a.id === task.agent_id) || LEADERSHIP.find(a => a.id === 'manager')
 
     let reply
     try {
       reply = await askAgent(
         agent.engine,
-        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ.\n\n${orgText}\n\n${teamText}\n\n${realityText}\n\nProjet : "${project.name}" (${project.description}). Ta tâche assignée : "${task.description}". Exécute-la maintenant, directement, sans demander confirmation pour ce qui est purement technique. MAIS si un choix de style, couleur, interface ou fonctionnalité est ambigu et qu'Olivier ne l'a pas précisé, NE DÉCIDE PAS seul — termine par "BESOIN_OLIVIER:" et pose la question précisément au lieu d'inventer un choix. Si tu écris du code, structure-le professionnellement dans une arborescence cohérente (pas de mélange src/ à la racine et ailleurs), avec un vrai README si pertinent (jamais une simple phrase recopiée). Utilise EXACTEMENT :\nFICHIER: chemin/fichier.ext\n\`\`\`langage\ncontenu\n\`\`\`\nNe recopie jamais le code hors de ce format. SEULEMENT si tu as absolument besoin d'Olivier (compte, SQL...), termine par "BESOIN_OLIVIER:" suivi des étapes numérotées.`,
+        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ.\n\n${orgText}\n\n${teamText}\n\n${realityFor(agent.id)}\n\nProjet : "${project.name}" (${project.description}). Ta tâche assignée : "${task.description}". Exécute-la maintenant, directement, sans demander confirmation pour ce qui est purement technique. MAIS si un choix de style, couleur, interface ou fonctionnalité est ambigu et qu'Olivier ne l'a pas précisé, NE DÉCIDE PAS seul — termine par "BESOIN_OLIVIER:" et pose la question précisément au lieu d'inventer un choix. Si tu écris du code, structure-le professionnellement dans une arborescence cohérente (pas de mélange src/ à la racine et ailleurs), avec un vrai README si pertinent (jamais une simple phrase recopiée). Utilise EXACTEMENT :\nFICHIER: chemin/fichier.ext\n\`\`\`langage\ncontenu\n\`\`\`\nNe recopie jamais le code hors de ce format. SEULEMENT si tu as absolument besoin d'Olivier (compte, SQL...), termine par "BESOIN_OLIVIER:" suivi des étapes numérotées.`,
         'Exécute cette tâche maintenant.'
       )
     } catch (e) {
@@ -216,7 +220,7 @@ export default async function handler(req, res) {
     const files = extractFiles(reply)
     if (files.length > 0) {
       for (const f of files) {
-        await supabase.from('project_files').upsert({ project_id: project.id, path: f.path, content: f.content }, { onConflict: 'project_id,path' })
+        await supabase.from('project_files').upsert({ project_id: project.id, path: f.path, content: f.content, agent_id: agent.id }, { onConflict: 'project_id,path' })
       }
       const repoName = project.github_repo || slugify(project.name)
       try {
@@ -244,7 +248,7 @@ export default async function handler(req, res) {
           const MANAGER = LEADERSHIP.find(a => a.id === 'manager')
           const evaluation = await askAgent(
             MANAGER.engine,
-            `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${ctx.orgText}\n\n${ctx.teamText}\n\n${ctx.realityText}\n\nToutes les tâches prévues pour "${project.name}" sont terminées. Le projet est-il vraiment propre et fini (structure correcte, fonctionnalités de base réellement présentes dans les fichiers réels listés), ou reste-t-il du travail concret à faire ? Si le projet est vraiment fini, réponds UNIQUEMENT: TERMINE. Sinon, réponds UNIQUEMENT avec 2 à 6 nouvelles tâches concrètes au format (une par ligne, agents réels de l'équipe uniquement) :\nTACHE: <id de l'agent> | <description courte>`,
+            `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${ctx.orgText}\n\n${ctx.teamText}\n\n${ctx.realityFor(MANAGER.id)}\n\nToutes les tâches prévues pour "${project.name}" sont terminées. Le projet est-il vraiment propre et fini (structure correcte, fonctionnalités de base réellement présentes dans les fichiers réels listés), ou reste-t-il du travail concret à faire ? Si le projet est vraiment fini, réponds UNIQUEMENT: TERMINE. Sinon, réponds UNIQUEMENT avec 2 à 6 nouvelles tâches concrètes au format (une par ligne, agents réels de l'équipe uniquement) :\nTACHE: <id de l'agent> | <description courte>`,
             'Évalue et décide maintenant.'
           )
           if (/^TERMINE/i.test(evaluation.trim())) {

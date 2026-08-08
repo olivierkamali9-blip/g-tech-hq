@@ -49,6 +49,7 @@ create table if not exists project_files (
   project_id uuid references projects(id) on delete cascade,
   path text not null,
   content text not null,
+  agent_id text,
   updated_at timestamptz default now(),
   unique(project_id, path)
 );
