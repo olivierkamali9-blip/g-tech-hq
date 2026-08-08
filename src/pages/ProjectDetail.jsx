@@ -68,13 +68,20 @@ export default function ProjectDetail() {
     if (projectAgents.length === 0 && !project.lead_agent_id) {
       return "ÉQUIPE DE CE PROJET : personne n'est encore assigné à ce projet précis."
     }
-    const lines = projectAgents.map(pa => {
-      const a = allKnown.find(x => x.id === pa.agent_id)
-      if (!a) return null
-      const isLead = project.lead_agent_id === a.id
-      return `- ${a.name} (${a.role})${isLead ? ' — CHEF DE PROJET' : ''}${pa.role_in_project ? ` : ${pa.role_in_project}` : ''}`
-    }).filter(Boolean)
-    return `ÉQUIPE ASSIGNÉE À CE PROJET PRÉCIS (les seuls agents censés y travailler activement) :\n${lines.join('\n')}`
+    const leadAgent = allKnown.find(a => a.id === project.lead_agent_id)
+    const members = projectAgents
+      .filter(pa => pa.agent_id !== project.lead_agent_id)
+      .map(pa => {
+        const a = allKnown.find(x => x.id === pa.agent_id)
+        if (!a) return null
+        return `- ${a.name} (${a.role})${pa.role_in_project ? ` : ${pa.role_in_project}` : ''}`
+      }).filter(Boolean)
+
+    const leadLine = leadAgent
+      ? `CHEF DE CE PROJET : ${leadAgent.name} (${leadAgent.role}). C'est lui qui planifie, répartit les tâches entre les membres ci-dessous, contrôle leur travail, sollicite les validations nécessaires (CTO/CPO/Finance/Juridique selon le sujet), puis transmet le résultat au Manager (Adrien). Les autres membres de cette équipe rendent compte à ${leadAgent.name} pour ce projet, pas directement à Adrien.`
+      : "Aucun chef de projet désigné pour l'instant."
+
+    return `ÉQUIPE ASSIGNÉE À CE PROJET PRÉCIS (les seuls agents censés y travailler activement) :\n${leadLine}\n${members.length ? 'MEMBRES SOUS SA SUPERVISION :\n' + members.join('\n') : ''}`
   }
 
   // Qui peut répondre : la Direction + les agents réellement assignés à ce projet
