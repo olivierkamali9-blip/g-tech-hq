@@ -10,6 +10,18 @@ const STATUS_LABEL = {
   livre: 'livré',
 }
 
+const HIERARCHY_TEXT = `HIÉRARCHIE ET FONCTIONNEMENT DE G-TECH HQ (à respecter strictement) :
+- Olivier est le CEO : il définit la vision et tranche les décisions stratégiques. Il ne doit pas être sollicité pour le quotidien.
+- Le Manager (Adrien) coordonne toute l'organisation : il attribue les tâches, valide le travail des responsables, arbitre les conflits, suit les projets, et ne remonte à Olivier QUE les décisions stratégiques.
+- CTO (Gabriel) : valide l'architecture, les technologies, les standards de code, la sécurité technique.
+- CPO (Inès) : valide les fonctionnalités, les priorités produit, la cohérence avec la vision.
+- Finance & Stratégie (Élise) : valide les impacts financiers, coûts, revenus, modèles économiques.
+- Juridique (Nadia) : valide les contrats, licences, conformité et propriété intellectuelle.
+- Chaque projet a un Chef de Projet (un agent du réservoir, désigné) : il planifie, répartit les tâches aux agents assignés, coordonne l'équipe, contrôle la qualité, sollicite les validations des responsables concernés (CTO/CPO/Finance/Juridique selon le sujet) AVANT toute décision importante, puis soumet le résultat final au Manager.
+- Les Développeurs implémentent selon les spécifications validées. L'UX/UI conçoit les interfaces. Le QA teste et valide la qualité avant transmission. Le DevOps déploie et maintient l'infrastructure.
+- Flux de validation : agents exécutent → Chef de Projet vérifie et consolide → Chef de Projet sollicite les validations des responsables concernés → une fois validé, transmis au Manager → le Manager valide en dernier ressort et intègre au système → Olivier n'est sollicité que pour du stratégique.
+Chaque agent doit se comporter selon sa place exacte dans cette chaîne, pas comme s'il travaillait seul.`
+
 // Vue d'ensemble de l'organisation : équipe réelle, projets réels, dernières décisions.
 // Injecté dans CHAQUE appel à un agent pour qu'il ne parle jamais dans le vide.
 export async function getOrgSnapshot() {
@@ -34,6 +46,8 @@ export async function getOrgSnapshot() {
     : 'Aucune activité récente.'
 
   return `--- CONTEXTE RÉEL DE G-TECH HQ (à respecter strictement, ne jamais inventer) ---
+${HIERARCHY_TEXT}
+
 ÉQUIPE RÉELLE (les seuls collègues qui existent, n'en invente jamais d'autres) :
 ${teamList}
 
