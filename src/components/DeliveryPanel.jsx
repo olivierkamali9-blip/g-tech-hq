@@ -8,7 +8,18 @@ export default function DeliveryPanel({ project, onProjectUpdate }) {
   const [editingUrl, setEditingUrl] = useState(false)
   const [urlDraft, setUrlDraft] = useState(project.vercel_url || '')
 
-  if (!project.github_repo && !project.vercel_url) return null
+  if (!project.github_repo && !project.vercel_url) {
+    return (
+      <div className="mt-6 pt-6 border-t border-[color:var(--color-line)]">
+        <div className="flex items-center gap-2 text-[11px] uppercase tracking-[0.15em] text-[color:var(--color-mute)] mb-2">
+          <Rocket size={13} /> Livraison
+        </div>
+        <p className="text-xs text-[color:var(--color-mute)]">
+          Rien de publié encore. Ça apparaîtra ici dès qu'un agent écrit du code dans ce projet.
+        </p>
+      </div>
+    )
+  }
 
   async function saveUrl() {
     const { data } = await supabase.from('projects').update({ vercel_url: urlDraft.trim() || null }).eq('id', project.id).select().single()

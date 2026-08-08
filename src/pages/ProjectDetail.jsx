@@ -212,7 +212,7 @@ export default function ProjectDetail() {
       const [orgContext, agentMemory] = await Promise.all([getOrgSnapshot(), getAgentMemory(MANAGER.id)])
       const decision = await askAgent(
         MANAGER.engine,
-        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\n${projectTeamText()}\n\n${agentMemory}\n\nLe projet "${project?.name}" est en cours. Décide toi-même de la prochaine action concrète et utile, annonce-la comme une décision déjà prise. SEULEMENT si une action nécessite absolument Olivier (compte à créer, SQL à coller...), termine par "BESOIN_OLIVIER:" suivi des étapes précises numérotées. Si une échéance concrète se dégage, ajoute une ligne "DEADLINE: <titre court> | <date AAAA-MM-JJ>". Sois concis, en français.`,
+        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\n${projectTeamText()}\n\n${agentMemory}\n\nLe projet "${project?.name}" est en cours. IMPORTANT : tu ne peux QUE toi-même agir maintenant (les autres agents de l'équipe ne travaillent pas en arrière-plan, ils n'agissent que quand Olivier leur écrit directement). Donc soit tu fais toi-même une action concrète MAINTENANT (écrire un fichier, une décision, un document), soit tu dis clairement à Olivier quel agent il doit aller solliciter et pourquoi — ne prétends jamais qu'un autre agent est "en train de" faire quelque chose s'il n'a pas été sollicité. Si tu écris du code, structure-le professionnellement et utilise EXACTEMENT ce format par fichier :\nFICHIER: chemin/du/fichier.ext\n\`\`\`langage\ncontenu complet\n\`\`\`\nNe recopie jamais le code dans ta réponse visible en dehors de ce format. SEULEMENT si une action nécessite absolument Olivier (compte à créer, SQL à coller...), termine par "BESOIN_OLIVIER:" suivi des étapes précises numérotées. Si une échéance concrète se dégage, ajoute une ligne "DEADLINE: <titre court> | <date AAAA-MM-JJ>". Sois concis, en français.`,
         [...history, { role: 'user', content: 'Fais avancer ce projet maintenant.' }]
       )
 
@@ -222,9 +222,12 @@ export default function ProjectDetail() {
       const deadlineMatch = decision.match(/DEADLINE:\s*(.+?)\s*\|\s*(\d{4}-\d{2}-\d{2})/i)
 
       const { data: savedReply } = await supabase.from('messages').insert({
-        project_id: id, author_id: MANAGER.id, author_name: MANAGER.name, content: publicPart.trim(),
+        project_id: id, author_id: MANAGER.id, author_name: MANAGER.name, content: stripFileBlocks(publicPart.trim()),
       }).select().single()
       setMessages(prev => [...prev, savedReply])
+
+      const files = extractFilesFromMessage(decision)
+      if (files.length > 0) await autoSaveAndPublish(files)
 
       await supabase.from('activity_log').insert({ project_id: id, label: `${MANAGER.name} a fait avancer « ${project.name} »` })
 
