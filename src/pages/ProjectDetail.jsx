@@ -286,13 +286,16 @@ export default function ProjectDetail() {
               </button>
             </h1>
           )}
-          <select
-            value={project.status}
-            onChange={e => changeStatus(e.target.value)}
-            className="text-xs text-[color:var(--color-mute)] mt-1 bg-transparent outline-none cursor-pointer hover:text-[color:var(--color-gold)]"
-          >
-            {STATUSES.map(s => <option key={s} value={s} className="bg-[color:var(--color-surface)]">{STATUS_LABEL[s]}</option>)}
-          </select>
+          <div className="flex items-center gap-2 mt-1">
+            <select
+              value={project.status}
+              onChange={e => changeStatus(e.target.value)}
+              className="text-xs text-[color:var(--color-mute)] bg-transparent outline-none cursor-pointer hover:text-[color:var(--color-gold)]"
+            >
+              {STATUSES.map(s => <option key={s} value={s} className="bg-[color:var(--color-surface)]">{STATUS_LABEL[s]}</option>)}
+            </select>
+            <NextStatusButton status={project.status} onAdvance={changeStatus} />
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 md:py-6 space-y-5 max-h-[55vh] md:max-h-none">
@@ -375,6 +378,25 @@ export default function ProjectDetail() {
         <DeleteProjectPanel project={project} onProjectUpdate={setProject} />
       </div>
     </div>
+  )
+}
+
+function NextStatusButton({ status, onAdvance }) {
+  const NEXT = {
+    idee: { to: 'valide', label: 'Valider ce projet →' },
+    en_discussion: { to: 'valide', label: 'Valider ce projet →' },
+    valide: { to: 'en_cours', label: 'Lancer le travail →' },
+    en_cours: { to: 'livre', label: 'Marquer comme livré ✓' },
+  }
+  const next = NEXT[status]
+  if (!next) return null
+  return (
+    <button
+      onClick={() => onAdvance(next.to)}
+      className="text-[10px] px-2 py-0.5 rounded-full bg-[color:var(--color-gold)] text-[color:var(--color-void)] font-medium hover:bg-[color:var(--color-gold-bright)]"
+    >
+      {next.label}
+    </button>
   )
 }
 
