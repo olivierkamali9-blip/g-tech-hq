@@ -87,6 +87,23 @@ export default function ProjectDetail() {
     return `ÉQUIPE ASSIGNÉE À CE PROJET PRÉCIS (les seuls agents censés y travailler activement) :\n${leadLine}\n${members.length ? 'MEMBRES SOUS SA SUPERVISION :\n' + members.join('\n') : ''}`
   }
 
+  async function projectRealityText() {
+    const [{ data: files }, { data: doneTasks }] = await Promise.all([
+      supabase.from('project_files').select('path').eq('project_id', id).order('path'),
+      supabase.from('project_tasks').select('description, status').eq('project_id', id).order('sequence'),
+    ])
+    const filesText = (files || []).length
+      ? (files || []).map(f => f.path).join(', ')
+      : "AUCUN fichier n'existe encore réellement dans ce projet."
+    const tasksText = (doneTasks || []).length
+      ? (doneTasks || []).map(t => `[${t.status}] ${t.description}`).join(' | ')
+      : "Aucune tâche n'a encore été exécutée."
+    const repoText = project.github_repo
+      ? `Repo GitHub réel : github.com/olivierkamali9-blip/${project.github_repo}`
+      : "AUCUN repo GitHub n'existe encore pour ce projet."
+    return `--- ÉTAT RÉEL DU PROJET (vérité absolue — ne dis JAMAIS avoir fait quelque chose qui n'est pas listé ici) ---\nFICHIERS QUI EXISTENT VRAIMENT : ${filesText}\n${repoText}\nTÂCHES : ${tasksText}\nSi on te demande ce qui a été fait et que ce n'est pas ci-dessus, dis honnêtement que ce n'est pas encore fait.\n--- FIN ÉTAT RÉEL ---`
+  }
+
   // Qui peut répondre : la Direction + les agents réellement assignés à ce projet
   const respondable = [
     ...LEADERSHIP,
@@ -123,7 +140,7 @@ export default function ProjectDetail() {
       const orgContext = await getOrgSnapshot()
       const raw = await askAgent(
         MANAGER.engine,
-        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\n${projectTeamText()}\n\nOlivier vient de lancer le travail sur "${currentProject.name}" (${currentProject.description}). Découpe ce projet en 4 à 10 tâches concrètes, actionnables, dans l'ordre logique d'exécution. La plupart sont assignées à un agent RÉELLEMENT assigné à ce projet (voir équipe ci-dessus — si personne n'est assigné, assigne-toi les tâches à toi-même). MAIS respecte aussi le vrai circuit de validation : insère une tâche de validation assignée au bon responsable de la Direction (cto pour l'architecture/technique, cpo pour les fonctionnalités/produit, finance si impact financier notable, legal si conformité/licence en jeu) À CHAQUE ÉTAPE où ça a du sens, juste après le travail concerné — pas systématiquement partout, seulement quand c'est pertinent. Réponds UNIQUEMENT avec ce format, une ligne par tâche, rien d'autre :\nTACHE: <id de l'agent> | <description courte et actionnable>`,
+        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\n${projectTeamText()}\n\nOlivier vient de lancer le travail sur "${currentProject.name}" (${currentProject.description}). Découpe ce projet en 4 à 10 tâches concrètes, actionnables, dans l'ordre logique d'exécution. RÈGLE STRICTE : si des agents sont listés dans MEMBRES SOUS SA SUPERVISION ci-dessus, la majorité des tâches DOIVENT leur être assignées à EUX (utilise leurs id exacts), pas à toi-même — tu ne t'assignes des tâches à toi-même QUE si aucun agent n'est assigné au projet, ou pour les étapes de coordination/validation qui te reviennent vraiment. Insère aussi une tâche de validation assignée au bon responsable de la Direction (cto pour l'architecture/technique, cpo pour les fonctionnalités/produit, finance si impact financier notable, legal si conformité/licence en jeu) quand c'est pertinent. Réponds UNIQUEMENT avec ce format, une ligne par tâche, rien d'autre :\nTACHE: <id de l'agent> | <description courte et actionnable>`,
         [{ role: 'user', content: 'Découpe le projet en tâches maintenant.' }]
       )
       const lines = [...raw.matchAll(/TACHE:\s*([a-z0-9-]+)\s*\|\s*(.+)/gi)]
@@ -179,10 +196,10 @@ export default function ProjectDetail() {
         role: m.author_id === 'user' ? 'user' : 'assistant',
         content: m.content,
       }))
-      const [orgContext, agentMemory] = await Promise.all([getOrgSnapshot(), getAgentMemory(agent.id)])
+      const [orgContext, agentMemory, realityText] = await Promise.all([getOrgSnapshot(), getAgentMemory(agent.id), projectRealityText()])
       const reply = await askAgent(
         agent.engine,
-        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ, l'espace de travail multi-agents d'Olivier. Ton rôle : ${agent.title}.\n\n${orgContext}\n\n${projectTeamText()}\n\n${agentMemory}\n\nLe projet en cours s'appelle "${project?.name}". Ne parle QUE de ce qui relève de ton rôle ; si une question dépasse ton domaine, dis que c'est à un autre membre de l'ÉQUIPE DE CE PROJET de répondre (nomme-le). Ne connais et ne cite jamais un collègue qui n'est pas listé dans le contexte ci-dessus — s'inventer un nom est une faute grave.\n\nSi tu écris du code, structure le projet PROFESSIONNELLEMENT comme un vrai projet tech (dossiers src/, un README.md, package.json si pertinent — jamais tout à plat). Utilise EXACTEMENT ce format pour chaque fichier :\nFICHIER: chemin/du/fichier.ext\n\`\`\`langage\ncontenu complet du fichier\n\`\`\`\nIMPORTANT : dans ta réponse visible (en dehors des blocs FICHIER), ne recopie JAMAIS le code ni son contenu — Olivier ne veut pas le voir défiler dans le chat, seulement sur GitHub. Dis juste en une phrase ce que tu as fait (ex: \"J'ai ajouté la structure de base avec 3 fichiers, disponible sur GitHub.\"). Tu n'es pas obligé d'utiliser Supabase/Vercel par défaut — propose la meilleure architecture selon le projet. Si une action nécessite qu'Olivier fasse quelque chose lui-même (créer un compte, coller du SQL, connecter le repo à Vercel pour le déploiement...), termine ta réponse par une ligne "BESOIN_OLIVIER:" suivie des étapes précises, numérotées, comme un tutoriel clair — ça lui sera envoyé en message privé automatiquement. Si Olivier te demande un document, rédige-le entièrement en markdown.`,
+        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ, l'espace de travail multi-agents d'Olivier. Ton rôle : ${agent.title}.\n\n${orgContext}\n\n${projectTeamText()}\n\n${realityText}\n\n${agentMemory}\n\nLe projet en cours s'appelle "${project?.name}". Ne parle QUE de ce qui relève de ton rôle ; si une question dépasse ton domaine, dis que c'est à un autre membre de l'ÉQUIPE DE CE PROJET de répondre (nomme-le). Ne connais et ne cite jamais un collègue qui n'est pas listé dans le contexte ci-dessus — s'inventer un nom est une faute grave.\n\nSi une décision de style, couleur, interface ou fonctionnalité est ambiguë et pas encore précisée par Olivier, NE DÉCIDE PAS seul — pose la question via "BESOIN_OLIVIER:" plutôt que d'inventer un choix.\n\nSi tu écris du code, structure le projet PROFESSIONNELLEMENT comme un vrai projet tech (une seule arborescence cohérente, dossiers src/, un vrai README.md décrivant le projet — jamais la phrase brute d'Olivier recopiée telle quelle, package.json si pertinent). Utilise EXACTEMENT ce format pour chaque fichier :\nFICHIER: chemin/du/fichier.ext\n\`\`\`langage\ncontenu complet du fichier\n\`\`\`\nIMPORTANT : dans ta réponse visible (en dehors des blocs FICHIER), ne recopie JAMAIS le code ni son contenu — Olivier ne veut pas le voir défiler dans le chat, seulement sur GitHub. Dis juste en une phrase ce que tu as fait. Tu n'es pas obligé d'utiliser Supabase/Vercel par défaut — propose la meilleure architecture selon le projet. Si une action nécessite qu'Olivier fasse quelque chose lui-même, termine ta réponse par une ligne "BESOIN_OLIVIER:" suivie des étapes précises numérotées. Si Olivier te demande un document, rédige-le entièrement en markdown.`,
         history
       )
       const [visiblePart, needRaw] = reply.split(/BESOIN_OLIVIER:/i)
@@ -204,10 +221,10 @@ export default function ProjectDetail() {
       if (concernedId && concernedId !== agent.id) {
         const concerned = LEADERSHIP.find(a => a.id === concernedId)
         try {
-          const [chimeOrg, chimeMemory] = await Promise.all([getOrgSnapshot(), getAgentMemory(concerned.id)])
+          const [chimeOrg, chimeMemory, chimeReality] = await Promise.all([getOrgSnapshot(), getAgentMemory(concerned.id), projectRealityText()])
           const chimeIn = await askAgent(
             concerned.engine,
-            `Tu es ${concerned.name}, "${concerned.role}" dans G-Tech HQ. ${chimeOrg}\n\n${projectTeamText()}\n\n${chimeMemory}\n\nTu n'as pas été sollicité directement, mais ce qui vient d'être dit dans le projet "${project?.name}" touche à ton domaine (${concerned.title}). Interviens brièvement seulement si tu as un point pertinent — reste concis. En français.`,
+            `Tu es ${concerned.name}, "${concerned.role}" dans G-Tech HQ. ${chimeOrg}\n\n${projectTeamText()}\n\n${chimeReality}\n\n${chimeMemory}\n\nTu n'as pas été sollicité directement, mais ce qui vient d'être dit dans le projet "${project?.name}" touche à ton domaine (${concerned.title}). Interviens brièvement seulement si tu as un point pertinent — reste concis. En français.`,
             [...history, { role: 'assistant', content: reply }]
           )
           const { data: savedChime } = await supabase.from('messages').insert({
@@ -231,10 +248,10 @@ export default function ProjectDetail() {
         role: m.author_id === 'user' ? 'user' : 'assistant',
         content: m.content,
       }))
-      const [orgContext, agentMemory] = await Promise.all([getOrgSnapshot(), getAgentMemory(MANAGER.id)])
+      const [orgContext, agentMemory, realityText] = await Promise.all([getOrgSnapshot(), getAgentMemory(MANAGER.id), projectRealityText()])
       const decision = await askAgent(
         MANAGER.engine,
-        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\n${projectTeamText()}\n\n${agentMemory}\n\nLe projet "${project?.name}" est en cours. IMPORTANT : tu ne peux QUE toi-même agir maintenant (les autres agents de l'équipe ne travaillent pas en arrière-plan, ils n'agissent que quand Olivier leur écrit directement). Donc soit tu fais toi-même une action concrète MAINTENANT (écrire un fichier, une décision, un document), soit tu dis clairement à Olivier quel agent il doit aller solliciter et pourquoi — ne prétends jamais qu'un autre agent est "en train de" faire quelque chose s'il n'a pas été sollicité. Si tu écris du code, structure-le professionnellement et utilise EXACTEMENT ce format par fichier :\nFICHIER: chemin/du/fichier.ext\n\`\`\`langage\ncontenu complet\n\`\`\`\nNe recopie jamais le code dans ta réponse visible en dehors de ce format. SEULEMENT si une action nécessite absolument Olivier (compte à créer, SQL à coller...), termine par "BESOIN_OLIVIER:" suivi des étapes précises numérotées. Si une échéance concrète se dégage, ajoute une ligne "DEADLINE: <titre court> | <date AAAA-MM-JJ>". Sois concis, en français.`,
+        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\n${projectTeamText()}\n\n${realityText}\n\n${agentMemory}\n\nLe projet "${project?.name}" est en cours. IMPORTANT : tu ne peux QUE toi-même agir maintenant (les autres agents de l'équipe ne travaillent pas en arrière-plan, ils n'agissent que quand Olivier leur écrit directement). Donc soit tu fais toi-même une action concrète MAINTENANT (écrire un fichier, une décision, un document), soit tu dis clairement à Olivier quel agent il doit aller solliciter et pourquoi — ne prétends jamais qu'un autre agent est "en train de" faire quelque chose s'il n'a pas été sollicité, et ne prétends jamais qu'un fichier existe s'il n'est pas dans l'état réel ci-dessus. Si tu écris du code, structure-le professionnellement et utilise EXACTEMENT ce format par fichier :\nFICHIER: chemin/du/fichier.ext\n\`\`\`langage\ncontenu complet\n\`\`\`\nNe recopie jamais le code dans ta réponse visible en dehors de ce format. SEULEMENT si une action nécessite absolument Olivier (compte à créer, SQL à coller...), termine par "BESOIN_OLIVIER:" suivi des étapes précises numérotées. Si une échéance concrète se dégage, ajoute une ligne "DEADLINE: <titre court> | <date AAAA-MM-JJ>". Sois concis, en français.`,
         [...history, { role: 'user', content: 'Fais avancer ce projet maintenant.' }]
       )
 

@@ -150,10 +150,19 @@ async function buildContext(projectId) {
     ? `CHEF DE CE PROJET : ${lead.name}. MEMBRES : ${members || 'aucun autre'}.`
     : "Aucun chef de projet désigné."
 
+  const [{ data: files }, { data: allTasks }] = await Promise.all([
+    supabase.from('project_files').select('path').eq('project_id', projectId).order('path'),
+    supabase.from('project_tasks').select('description, status').eq('project_id', projectId).order('sequence'),
+  ])
+  const filesText = (files || []).length ? files.map(f => f.path).join(', ') : "AUCUN fichier n'existe encore."
+  const tasksText = (allTasks || []).length ? allTasks.map(t => `[${t.status}] ${t.description}`).join(' | ') : 'aucune tâche encore.'
+  const repoText = project?.github_repo ? `Repo GitHub réel : github.com/olivierkamali9-blip/${project.github_repo}` : "AUCUN repo GitHub n'existe encore."
+  const realityText = `--- ÉTAT RÉEL DU PROJET (vérité absolue) ---\nFICHIERS RÉELS : ${filesText}\n${repoText}\nTÂCHES : ${tasksText}\nNe prétends jamais avoir fait quelque chose qui n'est pas listé ici.\n--- FIN ---`
+
   return {
     allKnown, project,
     orgText: `--- CONTEXTE G-TECH HQ ---\n${HIERARCHY_TEXT}\nÉQUIPE : ${teamList}\nPROJETS : ${projectsList}\nACTIVITÉ RÉCENTE : ${activityList}\n${BREVITY}\n--- FIN ---`,
-    teamText,
+    teamText, realityText,
   }
 }
 
@@ -179,14 +188,14 @@ export default async function handler(req, res) {
     await supabase.from('project_tasks').update({ status: 'in_progress', updated_at: new Date().toISOString() }).eq('id', task.id)
 
     const project = task.projects
-    const { orgText, teamText, allKnown } = await buildContext(project.id)
+    const { orgText, teamText, realityText, allKnown } = await buildContext(project.id)
     const agent = allKnown.find(a => a.id === task.agent_id) || LEADERSHIP.find(a => a.id === 'manager')
 
     let reply
     try {
       reply = await askAgent(
         agent.engine,
-        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ.\n\n${orgText}\n\n${teamText}\n\nProjet : "${project.name}" (${project.description}). Ta tâche assignée : "${task.description}". Exécute-la maintenant, directement, sans demander confirmation. Si tu écris du code, structure-le professionnellement et utilise EXACTEMENT :\nFICHIER: chemin/fichier.ext\n\`\`\`langage\ncontenu\n\`\`\`\nNe recopie jamais le code hors de ce format. SEULEMENT si tu as absolument besoin d'Olivier (compte, SQL...), termine par "BESOIN_OLIVIER:" suivi des étapes numérotées.`,
+        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ.\n\n${orgText}\n\n${teamText}\n\n${realityText}\n\nProjet : "${project.name}" (${project.description}). Ta tâche assignée : "${task.description}". Exécute-la maintenant, directement, sans demander confirmation pour ce qui est purement technique. MAIS si un choix de style, couleur, interface ou fonctionnalité est ambigu et qu'Olivier ne l'a pas précisé, NE DÉCIDE PAS seul — termine par "BESOIN_OLIVIER:" et pose la question précisément au lieu d'inventer un choix. Si tu écris du code, structure-le professionnellement dans une arborescence cohérente (pas de mélange src/ à la racine et ailleurs), avec un vrai README si pertinent (jamais une simple phrase recopiée). Utilise EXACTEMENT :\nFICHIER: chemin/fichier.ext\n\`\`\`langage\ncontenu\n\`\`\`\nNe recopie jamais le code hors de ce format. SEULEMENT si tu as absolument besoin d'Olivier (compte, SQL...), termine par "BESOIN_OLIVIER:" suivi des étapes numérotées.`,
         'Exécute cette tâche maintenant.'
       )
     } catch (e) {
@@ -229,10 +238,35 @@ export default async function handler(req, res) {
     } else {
       const { count } = await supabase.from('project_tasks').select('id', { count: 'exact', head: true }).eq('project_id', project.id).in('status', ['pending', 'in_progress'])
       if (count === 0) {
-        await supabase.from('dm_messages').insert({
-          agent_id: 'manager', author_id: 'manager',
-          content: `Toutes les tâches du plan de **${project.name}** sont terminées. Tu peux relire et marquer le projet comme livré si tout te convient.`,
-        })
+        // Plus rien en attente : le Manager évalue si le projet est vraiment fini ou s'il faut continuer
+        try {
+          const ctx = await buildContext(project.id)
+          const MANAGER = LEADERSHIP.find(a => a.id === 'manager')
+          const evaluation = await askAgent(
+            MANAGER.engine,
+            `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${ctx.orgText}\n\n${ctx.teamText}\n\n${ctx.realityText}\n\nToutes les tâches prévues pour "${project.name}" sont terminées. Le projet est-il vraiment propre et fini (structure correcte, fonctionnalités de base réellement présentes dans les fichiers réels listés), ou reste-t-il du travail concret à faire ? Si le projet est vraiment fini, réponds UNIQUEMENT: TERMINE. Sinon, réponds UNIQUEMENT avec 2 à 6 nouvelles tâches concrètes au format (une par ligne, agents réels de l'équipe uniquement) :\nTACHE: <id de l'agent> | <description courte>`,
+            'Évalue et décide maintenant.'
+          )
+          if (/^TERMINE/i.test(evaluation.trim())) {
+            await supabase.from('dm_messages').insert({
+              agent_id: 'manager', author_id: 'manager',
+              content: `Le projet **${project.name}** est terminé et propre selon moi. Tu peux le marquer comme livré si tu es d'accord.`,
+            })
+          } else {
+            const lines = [...evaluation.matchAll(/TACHE:\s*([a-z0-9-]+)\s*\|\s*(.+)/gi)]
+            const maxSeq = task.sequence || 0
+            const newTasks = lines.map((m, i) => ({ project_id: project.id, agent_id: m[1].trim(), description: m[2].trim(), sequence: maxSeq + 1 + i }))
+            if (newTasks.length > 0) {
+              await supabase.from('project_tasks').insert(newTasks)
+              await supabase.from('activity_log').insert({ project_id: project.id, label: `${MANAGER.name} a ajouté ${newTasks.length} tâche(s) pour continuer le projet` })
+            } else {
+              await supabase.from('dm_messages').insert({
+                agent_id: 'manager', author_id: 'manager',
+                content: `J'ai fini le lot de tâches sur **${project.name}** mais je n'arrive pas à déterminer clairement la suite. Peux-tu regarder où ça en est ?`,
+              })
+            }
+          }
+        } catch (e) {}
       }
     }
 
