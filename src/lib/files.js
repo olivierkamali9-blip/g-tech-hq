@@ -19,5 +19,13 @@ export function downloadTextFile(filename, content) {
   URL.revokeObjectURL(url)
 }
 
-// Types de fichiers qu'on peut lire directement comme texte côté navigateur.
 export const READABLE_EXT = ['.txt', '.md', '.csv', '.json']
+
+export function slugify(name) {
+  return name
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+    .slice(0, 50) || 'projet'
+}

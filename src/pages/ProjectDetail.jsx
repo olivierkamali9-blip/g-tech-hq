@@ -4,7 +4,8 @@ import { supabase } from '../lib/supabase'
 import { askAgent } from '../lib/engines'
 import { getOrgSnapshot, getAgentMemory } from '../lib/context'
 import { fetchDynamicAgents } from '../lib/dynamicAgents'
-import { readFileAsText, downloadTextFile, READABLE_EXT } from '../lib/files'
+import { extractFilesFromMessage } from '../lib/codeParser'
+import { readFileAsText, downloadTextFile, READABLE_EXT, slugify } from '../lib/files'
 import { ALL_AGENTS, LEADERSHIP, POOL } from '../data/agents'
 import AgentAvatar from '../components/AgentAvatar'
 import DeleteProjectPanel from '../components/DeleteProjectPanel'
@@ -113,6 +114,30 @@ export default function ProjectDetail() {
     await supabase.from('activity_log').insert({ project_id: id, label: `Statut de « ${data.name} » changé en ${STATUS_LABEL[newStatus]}` })
   }
 
+  async function autoSaveAndPublish(files) {
+    if (files.length === 0) return
+    for (const f of files) {
+      await supabase.from('project_files').upsert({ project_id: id, path: f.path, content: f.content }, { onConflict: 'project_id,path' })
+    }
+    const repoName = project.github_repo || slugify(project.name)
+    try {
+      const res = await fetch('/api/github/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repoName, description: project.description, files }),
+      })
+      if (res.ok) {
+        if (!project.github_repo) {
+          const { data: updated } = await supabase.from('projects').update({ github_repo: repoName }).eq('id', id).select().single()
+          setProject(updated)
+        }
+        await supabase.from('activity_log').insert({
+          project_id: id, label: `${files.length} fichier${files.length > 1 ? 's' : ''} publié${files.length > 1 ? 's' : ''} automatiquement sur GitHub`,
+        })
+      }
+    } catch (e) {}
+  }
+
   async function send() {
     if (!input.trim() && !attachment) return
     setSending(true)
@@ -135,12 +160,23 @@ export default function ProjectDetail() {
       const [orgContext, agentMemory] = await Promise.all([getOrgSnapshot(), getAgentMemory(agent.id)])
       const reply = await askAgent(
         agent.engine,
-        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ, l'espace de travail multi-agents d'Olivier. Ton rôle : ${agent.title}.\n\n${orgContext}\n\n${projectTeamText()}\n\n${agentMemory}\n\nLe projet en cours s'appelle "${project?.name}". Réponds comme un collègue de confiance et compétent : clair, synthétique, jamais de blabla ni de formules creuses, va droit au but. Ne parle QUE de ce qui relève de ton rôle ; si une question dépasse ton domaine, dis que c'est à un autre membre de l'ÉQUIPE DE CE PROJET de répondre (nomme-le). Ne connais et ne cite jamais un collègue qui n'est pas listé dans le contexte ci-dessus — s'inventer un nom est une faute grave. Si Olivier te demande un document, rédige-le entièrement en markdown. En français.`,
+        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ, l'espace de travail multi-agents d'Olivier. Ton rôle : ${agent.title}.\n\n${orgContext}\n\n${projectTeamText()}\n\n${agentMemory}\n\nLe projet en cours s'appelle "${project?.name}". Ne parle QUE de ce qui relève de ton rôle ; si une question dépasse ton domaine, dis que c'est à un autre membre de l'ÉQUIPE DE CE PROJET de répondre (nomme-le). Ne connais et ne cite jamais un collègue qui n'est pas listé dans le contexte ci-dessus — s'inventer un nom est une faute grave.\n\nSi tu écris du code ou un fichier de projet, utilise EXACTEMENT ce format pour chaque fichier (il sera sauvegardé et publié automatiquement sur GitHub, Olivier n'a rien à copier) :\nFICHIER: chemin/du/fichier.ext\n\`\`\`langage\ncontenu complet du fichier\n\`\`\`\nTu n'es pas obligé d'utiliser Supabase/Vercel par défaut — propose la meilleure architecture selon le projet. Si une action nécessite qu'Olivier fasse quelque chose lui-même (créer un compte, coller du SQL, une clé API...), termine ta réponse par une ligne "BESOIN_OLIVIER:" suivie des étapes précises, numérotées, comme un tutoriel clair — ça lui sera envoyé en message privé automatiquement. Si Olivier te demande un document, rédige-le entièrement en markdown.`,
         history
       )
-      const agentMsg = { project_id: id, author_id: agent.id, author_name: agent.name, content: reply }
+      const [visiblePart, needRaw] = reply.split(/BESOIN_OLIVIER:/i)
+      const agentMsg = { project_id: id, author_id: agent.id, author_name: agent.name, content: visiblePart.trim() }
       const { data: savedReply } = await supabase.from('messages').insert(agentMsg).select().single()
       setMessages(prev => [...prev, savedReply])
+
+      const files = extractFilesFromMessage(reply)
+      if (files.length > 0) await autoSaveAndPublish(files)
+
+      if (needRaw && needRaw.trim()) {
+        await supabase.from('dm_messages').insert({
+          agent_id: agent.id, author_id: agent.id,
+          content: `À propos du projet **${project.name}** :\n\n${needRaw.trim()}`,
+        })
+      }
 
       const concernedId = detectConcernedAgent(text + ' ' + reply)
       if (concernedId && concernedId !== agent.id) {
@@ -176,7 +212,7 @@ export default function ProjectDetail() {
       const [orgContext, agentMemory] = await Promise.all([getOrgSnapshot(), getAgentMemory(MANAGER.id)])
       const decision = await askAgent(
         MANAGER.engine,
-        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\n${projectTeamText()}\n\n${agentMemory}\n\nLe projet "${project?.name}" est en cours. Décide toi-même de la prochaine action concrète et utile, annonce-la comme une décision déjà prise. SEULEMENT si une action nécessite absolument Olivier, termine par une ligne "BESOIN_OLIVIER:" suivie d'une phrase courte. Si une échéance concrète se dégage (deadline, date de livraison), ajoute aussi une ligne "DEADLINE: <titre court> | <date AAAA-MM-JJ>". Sois concis, en français.`,
+        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\n${projectTeamText()}\n\n${agentMemory}\n\nLe projet "${project?.name}" est en cours. Décide toi-même de la prochaine action concrète et utile, annonce-la comme une décision déjà prise. SEULEMENT si une action nécessite absolument Olivier (compte à créer, SQL à coller...), termine par "BESOIN_OLIVIER:" suivi des étapes précises numérotées. Si une échéance concrète se dégage, ajoute une ligne "DEADLINE: <titre court> | <date AAAA-MM-JJ>". Sois concis, en français.`,
         [...history, { role: 'user', content: 'Fais avancer ce projet maintenant.' }]
       )
 
