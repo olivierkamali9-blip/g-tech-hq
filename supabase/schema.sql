@@ -71,6 +71,20 @@ create table if not exists custom_agents (
   created_at timestamptz default now()
 );
 
+create table if not exists project_tasks (
+  id uuid primary key default gen_random_uuid(),
+  project_id uuid references projects(id) on delete cascade,
+  agent_id text not null,
+  description text not null,
+  sequence int not null default 0,
+  status text not null default 'pending', -- pending | in_progress | done | failed
+  result_summary text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+alter table projects add column if not exists orchestration_paused boolean default false;
+
 alter table projects enable row level security;
 alter table project_agents enable row level security;
 alter table messages enable row level security;
@@ -79,6 +93,7 @@ alter table dm_messages enable row level security;
 alter table project_files enable row level security;
 alter table org_events enable row level security;
 alter table custom_agents enable row level security;
+alter table project_tasks enable row level security;
 
 do $$ begin
   create policy "allow all - projects" on projects for all using (true) with check (true);
@@ -103,4 +118,7 @@ do $$ begin
 exception when duplicate_object then null; end $$;
 do $$ begin
   create policy "allow all - custom_agents" on custom_agents for all using (true) with check (true);
+exception when duplicate_object then null; end $$;
+do $$ begin
+  create policy "allow all - project_tasks" on project_tasks for all using (true) with check (true);
 exception when duplicate_object then null; end $$;

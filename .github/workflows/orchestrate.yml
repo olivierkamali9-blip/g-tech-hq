@@ -1,0 +1,15 @@
+name: Orchestrateur G-Tech HQ
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  advance:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Faire avancer la prochaine tâche en attente
+        run: |
+          curl -s -X POST "https://g-tech-hq.vercel.app/api/orchestrate" \
+            -H "x-cron-secret: ${{ secrets.ORCHESTRATE_SECRET }}"

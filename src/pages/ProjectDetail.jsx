@@ -13,6 +13,7 @@ import ProjectFiles from '../components/ProjectFiles'
 import AssignTeamPanel from '../components/AssignTeamPanel'
 import ProjectJournal from '../components/ProjectJournal'
 import DeliveryPanel from '../components/DeliveryPanel'
+import WorkPlanPanel from '../components/WorkPlanPanel'
 import ReactMarkdown from 'react-markdown'
 import { Send, Eye, Trash2, Paperclip, X, Download, Zap, Pencil, Check } from 'lucide-react'
 
@@ -112,6 +113,26 @@ export default function ProjectDetail() {
     const { data } = await supabase.from('projects').update({ status: newStatus }).eq('id', id).select().single()
     setProject(data)
     await supabase.from('activity_log').insert({ project_id: id, label: `Statut de « ${data.name} » changé en ${STATUS_LABEL[newStatus]}` })
+    if (newStatus === 'en_cours') await generatePlan(data)
+  }
+
+  async function generatePlan(currentProject) {
+    const MANAGER = LEADERSHIP.find(a => a.id === 'manager')
+    try {
+      const orgContext = await getOrgSnapshot()
+      const raw = await askAgent(
+        MANAGER.engine,
+        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\n${projectTeamText()}\n\nOlivier vient de lancer le travail sur "${currentProject.name}" (${currentProject.description}). Découpe ce projet en 3 à 8 tâches concrètes, actionnables, dans l'ordre logique d'exécution, chacune assignée à un agent RÉELLEMENT assigné à ce projet (voir équipe ci-dessus — si personne n'est assigné, assigne-toi les tâches à toi-même). Réponds UNIQUEMENT avec ce format, une ligne par tâche, rien d'autre :\nTACHE: <id de l'agent> | <description courte et actionnable>`,
+        [{ role: 'user', content: 'Découpe le projet en tâches maintenant.' }]
+      )
+      const lines = [...raw.matchAll(/TACHE:\s*([a-z0-9-]+)\s*\|\s*(.+)/gi)]
+      const tasks = lines.map((m, i) => ({ project_id: id, agent_id: m[1].trim(), description: m[2].trim(), sequence: i }))
+      if (tasks.length > 0) {
+        await supabase.from('project_tasks').insert(tasks)
+        await supabase.from('projects').update({ orchestration_paused: false }).eq('id', id)
+        await supabase.from('activity_log').insert({ project_id: id, label: `${MANAGER.name} a établi un plan de ${tasks.length} tâches` })
+      }
+    } catch (e) {}
   }
 
   async function autoSaveAndPublish(files) {
@@ -372,6 +393,7 @@ export default function ProjectDetail() {
         </p>
 
         <AssignTeamPanel project={project} projectAgents={projectAgents} onUpdate={loadAll} />
+        <WorkPlanPanel project={project} onProjectUpdate={setProject} />
         <DeliveryPanel project={project} onProjectUpdate={setProject} />
         <ProjectJournal projectId={project.id} />
         <ProjectFiles project={project} onProjectUpdate={setProject} />
