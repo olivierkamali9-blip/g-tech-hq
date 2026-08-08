@@ -116,8 +116,10 @@ export async function askAgent(engine, systemPrompt, messages) {
       return await fn(systemPrompt, messages)
     } catch (e) {
       lastError = e
-      const isQuota = String(e.message).toLowerCase().includes('quota') || String(e.message).includes('429')
-      if (!isQuota) throw e // erreur non liée au quota : pas la peine d'essayer un autre moteur
+      const msg = String(e.message).toLowerCase()
+      const isTransient = msg.includes('quota') || msg.includes('429') || msg.includes('rate limit')
+        || msg.includes('rate_limit') || msg.includes('tpm') || msg.includes('too large') || msg.includes('too many requests')
+      if (!isTransient) throw e // erreur non liée à une limite de capacité : pas la peine d'essayer un autre moteur
       // sinon on continue silencieusement vers le moteur suivant
     }
   }

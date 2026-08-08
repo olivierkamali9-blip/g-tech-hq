@@ -60,7 +60,7 @@ export default function Messages() {
     setThreads(prev => ({ ...prev, [activeId]: [...(prev[activeId] || []), saved] }))
 
     try {
-      const history = [...currentThread, saved].map(m => ({
+      const history = [...currentThread, saved].slice(-20).map(m => ({
         role: m.author_id === 'user' ? 'user' : 'assistant',
         content: m.content,
       }))

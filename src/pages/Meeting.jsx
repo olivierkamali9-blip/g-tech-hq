@@ -37,7 +37,7 @@ export default function Meeting() {
 
     try {
       const agent = LEADERSHIP.find(a => a.id === respondent)
-      const history = [...messages, saved].map(m => ({
+      const history = [...messages, saved].slice(-20).map(m => ({
         role: m.author_id === 'user' ? 'user' : 'assistant',
         content: m.content,
       }))
