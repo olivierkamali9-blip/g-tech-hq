@@ -10,79 +10,60 @@ const STATUS_LABEL = {
   livre: 'livré',
 }
 
-const HIERARCHY_TEXT = `HIÉRARCHIE ET FONCTIONNEMENT DE G-TECH HQ (à respecter strictement) :
-- Olivier est le CEO : il définit la vision et tranche les décisions stratégiques. Il ne doit pas être sollicité pour le quotidien.
-- Le Manager (Adrien) coordonne toute l'organisation : il attribue les tâches, valide le travail des responsables, arbitre les conflits, suit les projets, et ne remonte à Olivier QUE les décisions stratégiques.
-- CTO (Gabriel) : valide l'architecture, les technologies, les standards de code, la sécurité technique.
-- CPO (Inès) : valide les fonctionnalités, les priorités produit, la cohérence avec la vision.
-- Finance & Stratégie (Élise) : valide les impacts financiers, coûts, revenus, modèles économiques.
-- Juridique (Nadia) : valide les contrats, licences, conformité et propriété intellectuelle.
-- Chaque projet a un Chef de Projet (un agent du réservoir, désigné) : il planifie, répartit les tâches aux agents assignés, coordonne l'équipe, contrôle la qualité, sollicite les validations des responsables concernés (CTO/CPO/Finance/Juridique selon le sujet) AVANT toute décision importante, puis soumet le résultat final au Manager.
-- Les Développeurs implémentent selon les spécifications validées. L'UX/UI conçoit les interfaces. Le QA teste et valide la qualité avant transmission. Le DevOps déploie et maintient l'infrastructure.
-- Flux de validation : agents exécutent → Chef de Projet vérifie et consolide → Chef de Projet sollicite les validations des responsables concernés → une fois validé, transmis au Manager → le Manager valide en dernier ressort et intègre au système → Olivier n'est sollicité que pour du stratégique.
-Chaque agent doit se comporter selon sa place exacte dans cette chaîne, pas comme s'il travaillait seul.`
+export const BREVITY = "Réponds TRÈS BRIÈVEMENT — 1 à 3 phrases maximum, comme un vrai message entre collègues sur Slack, jamais un pavé. Pas d'intro, pas de conclusion, va droit au point utile. Ne rédige en plus long QUE si Olivier demande explicitement un document, un rapport ou du code."
+
+const HIERARCHY_TEXT = `HIÉRARCHIE : Olivier (CEO, décisions stratégiques seulement) → Adrien (Manager, coordonne tout, valide en dernier ressort) → Gabriel (CTO, valide technique), Inès (CPO, valide produit), Élise (Finance, valide argent), Nadia (Juridique, valide conformité) → Chef de Projet par projet (planifie, répartit, sollicite les validations, transmet à Adrien) → Développeurs/UX-UI/QA/DevOps (exécutent selon specs validées, rendent compte à leur Chef de Projet, pas à Adrien directement).`
 
 // Vue d'ensemble de l'organisation : équipe réelle, projets réels, dernières décisions.
-// Injecté dans CHAQUE appel à un agent pour qu'il ne parle jamais dans le vide.
+// Injecté dans CHAQUE appel à un agent pour qu'il ne parle jamais dans le vide. Volontairement compact pour économiser des tokens.
 export async function getOrgSnapshot() {
   const [{ data: projects }, { data: activity }, dynamicAgents] = await Promise.all([
-    supabase.from('projects').select('id, name, status, lead_agent_id').order('created_at', { ascending: false }).limit(20),
-    supabase.from('activity_log').select('label, created_at').order('created_at', { ascending: false }).limit(10),
+    supabase.from('projects').select('id, name, status, lead_agent_id').order('created_at', { ascending: false }).limit(12),
+    supabase.from('activity_log').select('label, created_at').order('created_at', { ascending: false }).limit(5),
     fetchDynamicAgents(),
   ])
 
   const allKnownAgents = [...ALL_AGENTS, ...dynamicAgents]
-  const teamList = allKnownAgents.map(a => `- ${a.name} (${a.role})${a.tier === 'pool' ? ' — réservoir, à assigner' : ' — direction'}`).join('\n')
+  const teamList = allKnownAgents.map(a => `${a.name}(${a.role})`).join(', ')
 
   const projectsList = (projects || []).length
-    ? projects.map(p => {
-        const lead = allKnownAgents.find(a => a.id === p.lead_agent_id)
-        return `- « ${p.name} » — statut : ${STATUS_LABEL[p.status] || p.status}${lead ? `, chef de projet : ${lead.name}` : ''}`
-      }).join('\n')
-    : "Aucun projet pour l'instant."
+    ? projects.map(p => `« ${p.name} »:${STATUS_LABEL[p.status] || p.status}`).join(', ')
+    : "aucun."
 
   const activityList = (activity || []).length
-    ? activity.map(a => `- ${a.label}`).join('\n')
-    : 'Aucune activité récente.'
+    ? activity.map(a => a.label).join(' | ')
+    : 'rien de récent.'
 
-  return `--- CONTEXTE RÉEL DE G-TECH HQ (à respecter strictement, ne jamais inventer) ---
+  return `--- CONTEXTE G-TECH HQ (ne jamais inventer au-delà) ---
 ${HIERARCHY_TEXT}
-
-ÉQUIPE RÉELLE (les seuls collègues qui existent, n'en invente jamais d'autres) :
-${teamList}
-
-PROJETS ACTUELS (${(projects || []).length} au total) :
-${projectsList}
-
-DERNIÈRES DÉCISIONS / ACTIVITÉ DE L'ORGANISATION :
-${activityList}
---- FIN DU CONTEXTE ---`
+ÉQUIPE RÉELLE : ${teamList}
+PROJETS : ${projectsList}
+DERNIÈRE ACTIVITÉ : ${activityList}
+${BREVITY}
+--- FIN CONTEXTE ---`
 }
 
 // Mémoire d'un agent à travers TOUS les espaces (projets, Réunion, messages privés).
-// Permet à un agent de rester cohérent même si la discussion a changé d'espace.
 export async function getAgentMemory(agentId, excludeCurrentThreadIds = []) {
   const [{ data: fromMessages }, { data: fromDm }] = await Promise.all([
-    supabase.from('messages').select('id, project_id, author_id, author_name, content, created_at')
-      .eq('author_id', agentId).order('created_at', { ascending: false }).limit(8),
+    supabase.from('messages').select('id, project_id, author_id, content, created_at')
+      .eq('author_id', agentId).order('created_at', { ascending: false }).limit(5),
     supabase.from('dm_messages').select('id, agent_id, author_id, content, created_at')
-      .eq('agent_id', agentId).order('created_at', { ascending: false }).limit(8),
+      .eq('agent_id', agentId).order('created_at', { ascending: false }).limit(5),
   ])
 
   const entries = [
     ...(fromMessages || [])
       .filter(m => !excludeCurrentThreadIds.includes(m.id))
-      .map(m => ({ when: m.created_at, text: `[${m.project_id ? 'projet' : 'réunion'}] Toi : ${m.content}` })),
+      .map(m => ({ when: m.created_at, text: m.content })),
     ...(fromDm || [])
       .filter(m => !excludeCurrentThreadIds.includes(m.id) && m.author_id === agentId)
-      .map(m => ({ when: m.created_at, text: `[message privé avec Olivier] Toi : ${m.content}` })),
+      .map(m => ({ when: m.created_at, text: m.content })),
   ]
     .sort((a, b) => new Date(a.when) - new Date(b.when))
-    .slice(-10)
+    .slice(-6)
 
   if (entries.length === 0) return ''
 
-  return `--- TA MÉMOIRE RÉCENTE DANS D'AUTRES ESPACES (reste cohérent avec ce que tu as déjà dit) ---
-${entries.map(e => `- ${e.text.slice(0, 220)}`).join('\n')}
---- FIN DE TA MÉMOIRE ---`
+  return `MÉMOIRE RÉCENTE (autres espaces) : ${entries.map(e => e.text.slice(0, 120)).join(' / ')}`
 }
