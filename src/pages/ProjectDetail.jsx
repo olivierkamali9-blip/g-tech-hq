@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { askAgent } from '../lib/engines'
 import { getOrgSnapshot, getAgentMemory } from '../lib/context'
 import { fetchDynamicAgents } from '../lib/dynamicAgents'
-import { extractFilesFromMessage } from '../lib/codeParser'
+import { extractFilesFromMessage, stripFileBlocks } from '../lib/codeParser'
 import { readFileAsText, downloadTextFile, READABLE_EXT, slugify } from '../lib/files'
 import { ALL_AGENTS, LEADERSHIP, POOL } from '../data/agents'
 import AgentAvatar from '../components/AgentAvatar'
@@ -160,11 +160,11 @@ export default function ProjectDetail() {
       const [orgContext, agentMemory] = await Promise.all([getOrgSnapshot(), getAgentMemory(agent.id)])
       const reply = await askAgent(
         agent.engine,
-        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ, l'espace de travail multi-agents d'Olivier. Ton rôle : ${agent.title}.\n\n${orgContext}\n\n${projectTeamText()}\n\n${agentMemory}\n\nLe projet en cours s'appelle "${project?.name}". Ne parle QUE de ce qui relève de ton rôle ; si une question dépasse ton domaine, dis que c'est à un autre membre de l'ÉQUIPE DE CE PROJET de répondre (nomme-le). Ne connais et ne cite jamais un collègue qui n'est pas listé dans le contexte ci-dessus — s'inventer un nom est une faute grave.\n\nSi tu écris du code ou un fichier de projet, utilise EXACTEMENT ce format pour chaque fichier (il sera sauvegardé et publié automatiquement sur GitHub, Olivier n'a rien à copier) :\nFICHIER: chemin/du/fichier.ext\n\`\`\`langage\ncontenu complet du fichier\n\`\`\`\nTu n'es pas obligé d'utiliser Supabase/Vercel par défaut — propose la meilleure architecture selon le projet. Si une action nécessite qu'Olivier fasse quelque chose lui-même (créer un compte, coller du SQL, une clé API...), termine ta réponse par une ligne "BESOIN_OLIVIER:" suivie des étapes précises, numérotées, comme un tutoriel clair — ça lui sera envoyé en message privé automatiquement. Si Olivier te demande un document, rédige-le entièrement en markdown.`,
+        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ, l'espace de travail multi-agents d'Olivier. Ton rôle : ${agent.title}.\n\n${orgContext}\n\n${projectTeamText()}\n\n${agentMemory}\n\nLe projet en cours s'appelle "${project?.name}". Ne parle QUE de ce qui relève de ton rôle ; si une question dépasse ton domaine, dis que c'est à un autre membre de l'ÉQUIPE DE CE PROJET de répondre (nomme-le). Ne connais et ne cite jamais un collègue qui n'est pas listé dans le contexte ci-dessus — s'inventer un nom est une faute grave.\n\nSi tu écris du code, structure le projet PROFESSIONNELLEMENT comme un vrai projet tech (dossiers src/, un README.md, package.json si pertinent — jamais tout à plat). Utilise EXACTEMENT ce format pour chaque fichier :\nFICHIER: chemin/du/fichier.ext\n\`\`\`langage\ncontenu complet du fichier\n\`\`\`\nIMPORTANT : dans ta réponse visible (en dehors des blocs FICHIER), ne recopie JAMAIS le code ni son contenu — Olivier ne veut pas le voir défiler dans le chat, seulement sur GitHub. Dis juste en une phrase ce que tu as fait (ex: \"J'ai ajouté la structure de base avec 3 fichiers, disponible sur GitHub.\"). Tu n'es pas obligé d'utiliser Supabase/Vercel par défaut — propose la meilleure architecture selon le projet. Si une action nécessite qu'Olivier fasse quelque chose lui-même (créer un compte, coller du SQL, connecter le repo à Vercel pour le déploiement...), termine ta réponse par une ligne "BESOIN_OLIVIER:" suivie des étapes précises, numérotées, comme un tutoriel clair — ça lui sera envoyé en message privé automatiquement. Si Olivier te demande un document, rédige-le entièrement en markdown.`,
         history
       )
       const [visiblePart, needRaw] = reply.split(/BESOIN_OLIVIER:/i)
-      const agentMsg = { project_id: id, author_id: agent.id, author_name: agent.name, content: visiblePart.trim() }
+      const agentMsg = { project_id: id, author_id: agent.id, author_name: agent.name, content: stripFileBlocks(visiblePart.trim()) }
       const { data: savedReply } = await supabase.from('messages').insert(agentMsg).select().single()
       setMessages(prev => [...prev, savedReply])
 

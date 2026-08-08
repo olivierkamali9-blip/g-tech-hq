@@ -14,3 +14,10 @@ export function extractFilesFromMessage(text) {
   }
   return files
 }
+
+// Filet de sécurité : retire les blocs FICHIER du texte affiché dans le chat,
+// même si l'agent a oublié la consigne de ne pas les recopier visiblement.
+export function stripFileBlocks(text) {
+  const cleaned = text.replace(/FICHIER:\s*\S+\s*\n```[a-zA-Z0-9]*\n[\s\S]*?```/g, '').trim()
+  return cleaned || 'Fichiers mis à jour — disponibles sur GitHub.'
+}
