@@ -64,6 +64,19 @@ export default function ProjectDetail() {
 
   const allKnown = [...ALL_AGENTS, ...dynamicAgents]
 
+  function projectTeamText() {
+    if (projectAgents.length === 0 && !project.lead_agent_id) {
+      return "ÉQUIPE DE CE PROJET : personne n'est encore assigné à ce projet précis."
+    }
+    const lines = projectAgents.map(pa => {
+      const a = allKnown.find(x => x.id === pa.agent_id)
+      if (!a) return null
+      const isLead = project.lead_agent_id === a.id
+      return `- ${a.name} (${a.role})${isLead ? ' — CHEF DE PROJET' : ''}${pa.role_in_project ? ` : ${pa.role_in_project}` : ''}`
+    }).filter(Boolean)
+    return `ÉQUIPE ASSIGNÉE À CE PROJET PRÉCIS (les seuls agents censés y travailler activement) :\n${lines.join('\n')}`
+  }
+
   // Qui peut répondre : la Direction + les agents réellement assignés à ce projet
   const respondable = [
     ...LEADERSHIP,
@@ -115,7 +128,7 @@ export default function ProjectDetail() {
       const [orgContext, agentMemory] = await Promise.all([getOrgSnapshot(), getAgentMemory(agent.id)])
       const reply = await askAgent(
         agent.engine,
-        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ, l'espace de travail multi-agents d'Olivier. Ton rôle : ${agent.title}.\n\n${orgContext}\n\n${agentMemory}\n\nLe projet en cours s'appelle "${project?.name}". Réponds comme un collègue de confiance et compétent : clair, synthétique, jamais de blabla ni de formules creuses, va droit au but. Ne parle QUE de ce qui relève de ton rôle ; si une question dépasse ton domaine, dis que c'est à un autre membre de l'équipe de répondre (nomme-le si tu sais qui). Ne connais et ne cite jamais un collègue qui n'est pas listé dans le contexte ci-dessus — s'invente un nom, c'est une faute grave. Si Olivier te demande un document, rédige-le entièrement en markdown. En français.`,
+        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ, l'espace de travail multi-agents d'Olivier. Ton rôle : ${agent.title}.\n\n${orgContext}\n\n${projectTeamText()}\n\n${agentMemory}\n\nLe projet en cours s'appelle "${project?.name}". Réponds comme un collègue de confiance et compétent : clair, synthétique, jamais de blabla ni de formules creuses, va droit au but. Ne parle QUE de ce qui relève de ton rôle ; si une question dépasse ton domaine, dis que c'est à un autre membre de l'ÉQUIPE DE CE PROJET de répondre (nomme-le). Ne connais et ne cite jamais un collègue qui n'est pas listé dans le contexte ci-dessus — s'inventer un nom est une faute grave. Si Olivier te demande un document, rédige-le entièrement en markdown. En français.`,
         history
       )
       const agentMsg = { project_id: id, author_id: agent.id, author_name: agent.name, content: reply }
@@ -129,7 +142,7 @@ export default function ProjectDetail() {
           const [chimeOrg, chimeMemory] = await Promise.all([getOrgSnapshot(), getAgentMemory(concerned.id)])
           const chimeIn = await askAgent(
             concerned.engine,
-            `Tu es ${concerned.name}, "${concerned.role}" dans G-Tech HQ. ${chimeOrg}\n\n${chimeMemory}\n\nTu n'as pas été sollicité directement, mais ce qui vient d'être dit dans le projet "${project?.name}" touche à ton domaine (${concerned.title}). Interviens brièvement seulement si tu as un point pertinent — reste concis. En français.`,
+            `Tu es ${concerned.name}, "${concerned.role}" dans G-Tech HQ. ${chimeOrg}\n\n${projectTeamText()}\n\n${chimeMemory}\n\nTu n'as pas été sollicité directement, mais ce qui vient d'être dit dans le projet "${project?.name}" touche à ton domaine (${concerned.title}). Interviens brièvement seulement si tu as un point pertinent — reste concis. En français.`,
             [...history, { role: 'assistant', content: reply }]
           )
           const { data: savedChime } = await supabase.from('messages').insert({
@@ -156,7 +169,7 @@ export default function ProjectDetail() {
       const [orgContext, agentMemory] = await Promise.all([getOrgSnapshot(), getAgentMemory(MANAGER.id)])
       const decision = await askAgent(
         MANAGER.engine,
-        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\n${agentMemory}\n\nLe projet "${project?.name}" est en cours. Décide toi-même de la prochaine action concrète et utile, annonce-la comme une décision déjà prise. SEULEMENT si une action nécessite absolument Olivier, termine par une ligne "BESOIN_OLIVIER:" suivie d'une phrase courte. Si une échéance concrète se dégage (deadline, date de livraison), ajoute aussi une ligne "DEADLINE: <titre court> | <date AAAA-MM-JJ>". Sois concis, en français.`,
+        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\n${projectTeamText()}\n\n${agentMemory}\n\nLe projet "${project?.name}" est en cours. Décide toi-même de la prochaine action concrète et utile, annonce-la comme une décision déjà prise. SEULEMENT si une action nécessite absolument Olivier, termine par une ligne "BESOIN_OLIVIER:" suivie d'une phrase courte. Si une échéance concrète se dégage (deadline, date de livraison), ajoute aussi une ligne "DEADLINE: <titre court> | <date AAAA-MM-JJ>". Sois concis, en français.`,
         [...history, { role: 'user', content: 'Fais avancer ce projet maintenant.' }]
       )
 
