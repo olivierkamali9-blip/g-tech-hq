@@ -63,10 +63,12 @@ export default function WorkPlanPanel({ project, onProjectUpdate }) {
             <div key={t.id} className="flex items-start gap-2 text-xs">
               {ICONS[t.status]}
               <div>
+                {agent && (
+                  <span className="text-[color:var(--color-gold)] font-medium mr-1">{agent.name} :</span>
+                )}
                 <span className={t.status === 'done' ? 'text-[color:var(--color-mute)] line-through' : 'text-[color:var(--color-ivory-dim)]'}>
                   {t.description}
                 </span>
-                {agent && <span className="text-[10px] text-[color:var(--color-mute)] block">{agent.name}</span>}
               </div>
             </div>
           )

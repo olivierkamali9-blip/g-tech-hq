@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { askAgent } from '../lib/engines'
 import { getOrgSnapshot, getAgentMemory } from '../lib/context'
-import { fetchDynamicAgents } from '../lib/dynamicAgents'
+import { fetchDynamicAgents, nextAvailableReserveName, createDynamicAgent } from '../lib/dynamicAgents'
 import { extractFilesFromMessage, stripFileBlocks } from '../lib/codeParser'
 import { readFileAsText, downloadTextFile, READABLE_EXT, slugify } from '../lib/files'
 import { ALL_AGENTS, LEADERSHIP, POOL } from '../data/agents'
@@ -20,6 +20,8 @@ import { Send, Eye, Trash2, Paperclip, X, Download, Zap, Pencil, Check } from 'l
 
 const FINANCE_KEYWORDS = ['budget', 'coût', 'cout', 'prix', 'rentab', 'monétis', 'monetis', 'argent', 'revenu', 'client', 'vendre', 'payant']
 const LEGAL_KEYWORDS = ['légal', 'legal', 'loi', 'contrat', 'rgpd', 'données personnelles', 'donnees personnelles', 'droit', 'licence', 'conformité', 'conformite']
+const TECH_KEYWORDS = ['architecture', 'technique', 'stack', 'sécurité', 'securite', 'base de données', 'base de donnees', 'api', 'performance', 'code', 'infrastructure']
+const PRODUCT_KEYWORDS = ['fonctionnalité', 'fonctionnalite', 'feature', 'utilisateur', 'ux', 'interface', 'design', 'produit', 'parcours', 'expérience', 'experience']
 const STATUSES = ['idee', 'en_discussion', 'valide', 'en_cours', 'livre']
 const STATUS_LABEL = { idee: 'Idée', en_discussion: 'En discussion', valide: 'Validé', en_cours: 'En cours', livre: 'Livré' }
 const BESOIN_RULE = `Quand tu sollicites Olivier via "BESOIN_OLIVIER:", respecte deux règles : 1) Ne pose QUE des questions pertinentes pour l'ÉTAPE ACTUELLE réelle du projet (regarde l'état réel ci-dessus — si rien n'est encore construit, ne demande jamais des détails avancés comme le suivi de bugs en production ou le processus de mise à jour futur, concentre-toi sur ce qui bloque VRAIMENT maintenant). 2) Comme un collègue compétent, ne pose jamais une question toute nue : propose systématiquement 2-3 suggestions concrètes et réalistes, avec ton avis sur la meilleure option, pour qu'Olivier n'ait qu'à valider ou ajuster plutôt que de partir de zéro.`
@@ -28,6 +30,8 @@ function detectConcernedAgent(text) {
   const lower = text.toLowerCase()
   if (LEGAL_KEYWORDS.some(k => lower.includes(k))) return 'legal'
   if (FINANCE_KEYWORDS.some(k => lower.includes(k))) return 'finance'
+  if (TECH_KEYWORDS.some(k => lower.includes(k))) return 'cto'
+  if (PRODUCT_KEYWORDS.some(k => lower.includes(k))) return 'cpo'
   return null
 }
 
@@ -149,13 +153,60 @@ CE QUE LE RESTE DE L'ÉQUIPE A FAIT (pas toi — n'en prends jamais le crédit) 
     const MANAGER = LEADERSHIP.find(a => a.id === 'manager')
     try {
       const orgContext = await getOrgSnapshot()
+      const allPoolNow = [...POOL, ...dynamicAgents]
+      const assignedNow = allPoolNow.filter(a => projectAgents.some(pa => pa.agent_id === a.id))
+
+      // Adrien évalue d'abord si l'équipe actuelle suffit, ou s'il faut créer un nouveau poste
+      let extraAgentNote = ''
+      try {
+        const poolList = allPoolNow.map(a => `${a.id} = ${a.name} (${a.role})`).join('\n')
+        const check = await askAgent(
+          MANAGER.engine,
+          `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\nProjet "${currentProject.name}" (${currentProject.description}). Voici le réservoir de talents disponible :\n${poolList}\n\nCe réservoir couvre-t-il vraiment les compétences nécessaires pour CE projet précis ? Si un poste manque clairement (ex: Data Scientist, Motion Designer, Spécialiste paiement...), réponds UNIQUEMENT : NOUVEL_AGENT: <poste> | <fonction en une phrase> | <moteur parmi gemini/groq/mistral/openrouter>. Sinon réponds UNIQUEMENT : NON.`,
+          [{ role: 'user', content: 'Évalue maintenant.' }]
+        )
+        const m = check.match(/NOUVEL_AGENT:\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(gemini|groq|mistral|openrouter)/i)
+        if (m) {
+          const name = await nextAvailableReserveName()
+          if (name) {
+            const created = await createDynamicAgent({ name, role: m[1].trim(), title: m[2].trim(), engine: m[3].trim() })
+            await supabase.from('project_agents').insert({ project_id: id, agent_id: created.id, role_in_project: 'Recruté par Adrien pour ce projet' })
+            await supabase.from('activity_log').insert({ project_id: id, label: `${MANAGER.name} a recruté ${name} (${m[1].trim()}) pour ce projet` })
+            await supabase.from('dm_messages').insert({
+              agent_id: 'manager', author_id: 'manager', project_id: id,
+              content: `J'ai constaté qu'il nous manquait un profil "${m[1].trim()}" pour ce projet, donc j'ai intégré **${name}** à l'équipe. Je continue la planification.`,
+            })
+            extraAgentNote = `\nNouvel agent recruté pour ce projet : ${name} (id: ${created.id}, ${m[1].trim()}) — utilise-le dans le plan si pertinent.`
+          }
+        }
+      } catch (e) {}
+
       const raw = await askAgent(
         MANAGER.engine,
-        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\n${projectTeamText()}\n\nOlivier vient de lancer le travail sur "${currentProject.name}" (${currentProject.description}). Découpe ce projet en 4 à 10 tâches concrètes, actionnables, dans l'ordre logique d'exécution. RÈGLE ABSOLUE N°1 : la toute première tâche doit TOUJOURS être de poser les fondations techniques réelles et exécutables du projet (choix de la stack, fichier de config/build comme package.json, point d'entrée de l'application) — jamais des morceaux isolés (un composant par-ci, une route par-là) sans squelette qui les relie. Une "application" n'existe que si elle peut vraiment se lancer. RÈGLE N°2 : si des agents sont listés dans MEMBRES SOUS SA SUPERVISION ci-dessus, la majorité des tâches DOIVENT leur être assignées à EUX (utilise leurs id exacts), pas à toi-même — tu ne t'assignes des tâches à toi-même QUE si aucun agent n'est assigné au projet, ou pour les étapes de coordination/validation qui te reviennent vraiment. Insère aussi une tâche de validation assignée au bon responsable de la Direction (cto pour l'architecture/technique, cpo pour les fonctionnalités/produit, finance si impact financier notable, legal si conformité/licence en jeu) quand c'est pertinent. Réponds UNIQUEMENT avec ce format, une ligne par tâche, rien d'autre :\nTACHE: <id de l'agent> | <description courte et actionnable>`,
+        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\n${projectTeamText()}${extraAgentNote}\n\nOlivier vient de lancer le travail sur "${currentProject.name}" (${currentProject.description}). Découpe ce projet en 4 à 10 tâches concrètes, actionnables, dans l'ordre logique d'exécution. RÈGLE ABSOLUE N°1 : la toute première tâche doit TOUJOURS être de poser les fondations techniques réelles et exécutables du projet (choix de la stack, fichier de config/build comme package.json, point d'entrée de l'application) — jamais des morceaux isolés (un composant par-ci, une route par-là) sans squelette qui les relie. Une "application" n'existe que si elle peut vraiment se lancer. RÈGLE N°2 : si des agents sont listés dans MEMBRES SOUS SA SUPERVISION ci-dessus, la majorité des tâches DOIVENT leur être assignées à EUX (utilise leurs id exacts), pas à toi-même — tu ne t'assignes des tâches à toi-même QUE si aucun agent n'est assigné au projet, ou pour les étapes de coordination/validation qui te reviennent vraiment. Insère aussi une tâche de validation assignée au bon responsable de la Direction (cto pour l'architecture/technique, cpo pour les fonctionnalités/produit, finance si impact financier notable, legal si conformité/licence en jeu) quand c'est pertinent. Réponds UNIQUEMENT avec ce format, une ligne par tâche, rien d'autre :\nTACHE: <id de l'agent> | <description courte et actionnable>`,
         [{ role: 'user', content: 'Découpe le projet en tâches maintenant.' }]
       )
       const lines = [...raw.matchAll(/TACHE:\s*([a-z0-9-]+)\s*\|\s*(.+)/gi)]
-      const tasks = lines.map((m, i) => ({ project_id: id, agent_id: m[1].trim(), description: m[2].trim(), sequence: i }))
+      let tasks = lines.map((m, i) => ({ project_id: id, agent_id: m[1].trim(), description: m[2].trim(), sequence: i }))
+
+      // Filet de sécurité : si une équipe est assignée mais qu'Adrien garde presque tout pour lui, on redistribue
+      const assignableIds = assignedNow.map(a => a.id)
+      if (assignableIds.length > 0) {
+        const nonManagerCount = tasks.filter(t => t.agent_id !== 'manager').length
+        if (nonManagerCount < Math.ceil(tasks.length / 2)) {
+          let cursor = 0
+          tasks = tasks.map(t => {
+            const isValidation = /valid/i.test(t.description)
+            if (t.agent_id === 'manager' && !isValidation) {
+              const reassigned = assignableIds[cursor % assignableIds.length]
+              cursor++
+              return { ...t, agent_id: reassigned }
+            }
+            return t
+          })
+        }
+      }
+
       if (tasks.length > 0) {
         await supabase.from('project_tasks').insert(tasks)
         await supabase.from('projects').update({ orchestration_paused: false }).eq('id', id)
@@ -210,7 +261,7 @@ CE QUE LE RESTE DE L'ÉQUIPE A FAIT (pas toi — n'en prends jamais le crédit) 
       const [orgContext, agentMemory, realityText] = await Promise.all([getOrgSnapshot(), getAgentMemory(agent.id), projectRealityText(agent.id)])
       const managerTaskInstruction = agent.id === 'manager'
         ? `\n\nTu es aussi responsable de suivre cette discussion : si Olivier valide clairement une nouvelle idée, un ajout ou une modification cohérente avec le projet, traduis-la en tâche(s) concrète(s) pour l'équipe en ajoutant, à la fin de ta réponse, une ou plusieurs lignes "NOUVELLE_TACHE: <id agent> | <description courte>" (elles seront ajoutées automatiquement au plan de travail). Ne le fais QUE si c'est vraiment validé/clair dans cet échange, pas sur une simple suggestion floue.`
-        : ''
+        : `\n\nRÈGLE ABSOLUE : ne promets JAMAIS de faire quelque chose "plus tard", "bientôt" ou "je vais m'en occuper" sans agir maintenant. Si tu peux le produire tout de suite (un document, un fichier), fais-le DANS CETTE RÉPONSE avec le format FICHIER. Si ça demande plusieurs étapes futures, crée-toi une vraie tâche suivie en ajoutant à la fin de ta réponse une ligne "NOUVELLE_TACHE: ${agent.id} | <description courte de ce que tu feras>" plutôt qu'une promesse en l'air qui ne sera jamais vérifiée.`
       const reply = await askAgent(
         agent.engine,
         `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ, l'espace de travail multi-agents d'Olivier. Ton rôle : ${agent.title}.\n\n${orgContext}\n\n${projectTeamText()}\n\n${realityText}\n\n${agentMemory}\n\nLe projet en cours s'appelle "${project?.name}". Ne parle QUE de ce qui relève de ton rôle ; si une question dépasse ton domaine, dis que c'est à un autre membre de l'ÉQUIPE DE CE PROJET de répondre (nomme-le). Ne connais et ne cite jamais un collègue qui n'est pas listé dans le contexte ci-dessus — s'inventer un nom est une faute grave.\n\nSi une décision de style, couleur, interface ou fonctionnalité est ambiguë et pas encore précisée par Olivier, NE DÉCIDE PAS seul — pose la question via "BESOIN_OLIVIER:" plutôt que d'inventer un choix.${managerTaskInstruction}\n\nSi tu écris du code, structure le projet PROFESSIONNELLEMENT comme un vrai projet tech (une seule arborescence cohérente, dossiers src/, un vrai README.md décrivant le projet — jamais la phrase brute d'Olivier recopiée telle quelle, package.json si pertinent). Utilise EXACTEMENT ce format pour chaque fichier :\nFICHIER: chemin/du/fichier.ext\n\`\`\`langage\ncontenu complet du fichier\n\`\`\`\nIMPORTANT : dans ta réponse visible (en dehors des blocs FICHIER et NOUVELLE_TACHE), ne recopie JAMAIS le code ni son contenu — Olivier ne veut pas le voir défiler dans le chat, seulement sur GitHub. Dis juste en une phrase ce que tu as fait. Tu n'es pas obligé d'utiliser Supabase/Vercel par défaut — propose la meilleure architecture selon le projet. Si une action nécessite qu'Olivier fasse quelque chose lui-même, termine ta réponse par une ligne "BESOIN_OLIVIER:" suivie des étapes précises numérotées. ${BESOIN_RULE} Si Olivier te demande un document, rédige-le entièrement en markdown.`,
@@ -225,7 +276,7 @@ CE QUE LE RESTE DE L'ÉQUIPE A FAIT (pas toi — n'en prends jamais le crédit) 
       const files = extractFilesFromMessage(reply)
       if (files.length > 0) await autoSaveAndPublish(files, agent.id)
 
-      if (agent.id === 'manager') {
+      if (true) {
         const newTaskLines = [...reply.matchAll(/NOUVELLE_TACHE:\s*([a-z0-9-]+)\s*\|\s*(.+)/gi)]
         if (newTaskLines.length > 0) {
           const { count: existingCount } = await supabase.from('project_tasks').select('id', { count: 'exact', head: true }).eq('project_id', id)

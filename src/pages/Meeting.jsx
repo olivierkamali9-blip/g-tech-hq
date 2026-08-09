@@ -9,10 +9,14 @@ import { Send, Users2, PlayCircle } from 'lucide-react'
 
 const FINANCE_KEYWORDS = ['budget', 'coût', 'cout', 'prix', 'rentab', 'monétis', 'monetis', 'argent', 'revenu', 'client', 'vendre', 'payant']
 const LEGAL_KEYWORDS = ['légal', 'legal', 'loi', 'contrat', 'rgpd', 'données personnelles', 'donnees personnelles', 'droit', 'licence', 'conformité', 'conformite']
+const TECH_KEYWORDS = ['architecture', 'technique', 'stack', 'sécurité', 'securite', 'base de données', 'base de donnees', 'api', 'performance', 'code', 'infrastructure']
+const PRODUCT_KEYWORDS = ['fonctionnalité', 'fonctionnalite', 'feature', 'utilisateur', 'ux', 'interface', 'design', 'produit', 'parcours', 'expérience', 'experience']
 function detectConcernedAgent(text) {
   const lower = text.toLowerCase()
   if (LEGAL_KEYWORDS.some(k => lower.includes(k))) return 'legal'
   if (FINANCE_KEYWORDS.some(k => lower.includes(k))) return 'finance'
+  if (TECH_KEYWORDS.some(k => lower.includes(k))) return 'cto'
+  if (PRODUCT_KEYWORDS.some(k => lower.includes(k))) return 'cpo'
   return null
 }
 
