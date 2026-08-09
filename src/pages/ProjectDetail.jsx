@@ -22,17 +22,23 @@ const FINANCE_KEYWORDS = ['budget', 'coût', 'cout', 'prix', 'rentab', 'monétis
 const LEGAL_KEYWORDS = ['légal', 'legal', 'loi', 'contrat', 'rgpd', 'données personnelles', 'donnees personnelles', 'droit', 'licence', 'conformité', 'conformite']
 const TECH_KEYWORDS = ['architecture', 'technique', 'stack', 'sécurité', 'securite', 'base de données', 'base de donnees', 'api', 'performance', 'code', 'infrastructure']
 const PRODUCT_KEYWORDS = ['fonctionnalité', 'fonctionnalite', 'feature', 'utilisateur', 'ux', 'interface', 'design', 'produit', 'parcours', 'expérience', 'experience']
+const BACKEND_KEYWORDS = ['backend', 'serveur', 'route', 'endpoint']
+const FRONTEND_KEYWORDS = ['frontend', 'composant', 'écran', 'ecran', 'page web', 'affichage']
+const DESIGN_KEYWORDS = ['maquette', 'couleur', 'charte graphique', 'ergonomie']
+const QA_KEYWORDS = ['test', 'bug', 'qualité', 'qualite', 'anomalie', 'régression', 'regression']
+const DEVOPS_KEYWORDS = ['déploiement', 'deploiement', 'ci/cd', 'vercel', 'hébergement', 'hebergement']
 const STATUSES = ['idee', 'en_discussion', 'valide', 'en_cours', 'livre']
 const STATUS_LABEL = { idee: 'Idée', en_discussion: 'En discussion', valide: 'Validé', en_cours: 'En cours', livre: 'Livré' }
 const BESOIN_RULE = `Quand tu sollicites Olivier via "BESOIN_OLIVIER:", respecte deux règles : 1) Ne pose QUE des questions pertinentes pour l'ÉTAPE ACTUELLE réelle du projet (regarde l'état réel ci-dessus — si rien n'est encore construit, ne demande jamais des détails avancés comme le suivi de bugs en production ou le processus de mise à jour futur, concentre-toi sur ce qui bloque VRAIMENT maintenant). 2) Comme un collègue compétent, ne pose jamais une question toute nue : propose systématiquement 2-3 suggestions concrètes et réalistes, avec ton avis sur la meilleure option, pour qu'Olivier n'ait qu'à valider ou ajuster plutôt que de partir de zéro.`
 
-function detectConcernedAgent(text) {
+function detectConcernedAgent(text, candidates = []) {
   const lower = text.toLowerCase()
-  if (LEGAL_KEYWORDS.some(k => lower.includes(k))) return 'legal'
-  if (FINANCE_KEYWORDS.some(k => lower.includes(k))) return 'finance'
-  if (TECH_KEYWORDS.some(k => lower.includes(k))) return 'cto'
-  if (PRODUCT_KEYWORDS.some(k => lower.includes(k))) return 'cpo'
-  return null
+  const roleMatch = (keywords, roleSubstr) => candidates.find(a => a.role.toLowerCase().includes(roleSubstr) && keywords.some(k => lower.includes(k)))
+  const hit = roleMatch(LEGAL_KEYWORDS, 'juridique') || roleMatch(FINANCE_KEYWORDS, 'finance')
+    || roleMatch(TECH_KEYWORDS, 'cto') || roleMatch(PRODUCT_KEYWORDS, 'cpo')
+    || roleMatch(BACKEND_KEYWORDS, 'backend') || roleMatch(FRONTEND_KEYWORDS, 'frontend')
+    || roleMatch(DESIGN_KEYWORDS, 'ux/ui') || roleMatch(QA_KEYWORDS, 'qa') || roleMatch(DEVOPS_KEYWORDS, 'devops')
+  return hit || null
 }
 
 export default function ProjectDetail() {
@@ -108,7 +114,7 @@ export default function ProjectDetail() {
       : "AUCUN repo GitHub n'existe encore pour ce projet."
     const vercelText = project.vercel_url
       ? `Site en ligne réel : ${project.vercel_url}`
-      : "AUCUN site n'est déployé — NE DONNE JAMAIS un lien Vercel à Olivier tant que ce champ est vide, même si le repo existe. Le déploiement Vercel est une action manuelle unique qu'Olivier doit faire lui-même (import du repo sur vercel.com) — si le code est prêt, explique-lui ça précisément via BESOIN_OLIVIER."
+      : "AUCUN site n'est déployé — NE DONNE JAMAIS un lien Vercel à Olivier tant que ce champ est vide, même si le repo existe. Le déploiement Vercel est une action manuelle unique qu'Olivier doit faire lui-même (import du repo sur vercel.com) — mais AVANT de lui dire de le faire, vérifie dans la liste des fichiers réels ci-dessus qu'il existe bien un package.json (ou équivalent) ET un vrai point d'entrée (index.html, main.jsx, App.jsx ou similaire). Si ce n'est pas le cas, le déploiement donnera une page vide — dis-le clairement à Olivier et propose plutôt de finaliser les fondations d'abord."
 
     return `--- ÉTAT RÉEL DU PROJET (vérité absolue — ne dis JAMAIS avoir fait quelque chose que TOI n'as pas fait) ---
 ${repoText}
@@ -315,13 +321,9 @@ CE QUE LE RESTE DE L'ÉQUIPE A FAIT (pas toi — n'en prends jamais le crédit) 
         })
       }
 
-      const concernedId = detectConcernedAgent(text + ' ' + reply)
-      if (concernedId && concernedId !== agent.id) {
-        const concerned = LEADERSHIP.find(a => a.id === concernedId)
-        setSignal(concerned)
-      } else {
-        setSignal(null)
-      }
+      const candidates = respondable.filter(a => a.id !== agent.id)
+      const concerned = detectConcernedAgent(text + ' ' + reply, candidates)
+      setSignal(concerned)
     } catch (e) {
       setMessages(prev => [...prev, { id: 'err-' + Date.now(), author_id: 'system', author_name: 'Système', content: `Erreur : ${e.message}` }])
     } finally {

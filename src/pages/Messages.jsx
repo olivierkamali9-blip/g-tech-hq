@@ -8,6 +8,14 @@ import ReactMarkdown from 'react-markdown'
 import { Send, Trash2, PlayCircle } from 'lucide-react'
 import { markThreadRead } from '../lib/notifications'
 
+function hasUnread(thread, agentId) {
+  try {
+    const map = JSON.parse(localStorage.getItem('gtech-hq-dm-read') || '{}')
+    const lastRead = map[agentId]
+    return (thread || []).some(m => m.author_id !== 'user' && (!lastRead || new Date(m.created_at) > new Date(lastRead)))
+  } catch { return false }
+}
+
 export default function Messages() {
   const [activeId, setActiveId] = useState(LEADERSHIP[0].id)
   const [threads, setThreads] = useState({})
@@ -108,8 +116,11 @@ export default function Messages() {
               }`}
             >
               <AgentAvatar agent={a} size="sm" />
-              <div className="hidden md:block">
-                <div className="text-sm">{a.name}</div>
+              <div className="hidden md:block flex-1">
+                <div className="text-sm flex items-center gap-1.5">
+                  {a.name}
+                  {hasUnread(threads[a.id], a.id) && <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--color-gold)]" />}
+                </div>
                 <div className="text-[10px] text-[color:var(--color-mute)]">{a.role}</div>
               </div>
             </button>
