@@ -261,7 +261,7 @@ CE QUE LE RESTE DE L'ÉQUIPE A FAIT (pas toi — n'en prends jamais le crédit) 
       const [orgContext, agentMemory, realityText] = await Promise.all([getOrgSnapshot(), getAgentMemory(agent.id), projectRealityText(agent.id)])
       const managerTaskInstruction = agent.id === 'manager'
         ? `\n\nTu es aussi responsable de suivre cette discussion : si Olivier valide clairement une nouvelle idée, un ajout ou une modification cohérente avec le projet, traduis-la en tâche(s) concrète(s) pour l'équipe en ajoutant, à la fin de ta réponse, une ou plusieurs lignes "NOUVELLE_TACHE: <id agent> | <description courte>" (elles seront ajoutées automatiquement au plan de travail). Ne le fais QUE si c'est vraiment validé/clair dans cet échange, pas sur une simple suggestion floue.`
-        : `\n\nRÈGLE ABSOLUE : ne promets JAMAIS de faire quelque chose "plus tard", "bientôt" ou "je vais m'en occuper" sans agir maintenant. Si tu peux le produire tout de suite (un document, un fichier), fais-le DANS CETTE RÉPONSE avec le format FICHIER. Si ça demande plusieurs étapes futures, crée-toi une vraie tâche suivie en ajoutant à la fin de ta réponse une ligne "NOUVELLE_TACHE: ${agent.id} | <description courte de ce que tu feras>" plutôt qu'une promesse en l'air qui ne sera jamais vérifiée.`
+        : `\n\nRÈGLE ABSOLUE : ne promets JAMAIS de faire quelque chose "plus tard", "bientôt" ou "je vais m'en occuper" sans agir maintenant. Si tu peux le produire tout de suite (un document, un fichier), fais-le DANS CETTE RÉPONSE avec le format FICHIER. Si ça demande plusieurs étapes futures, propose une vraie tâche suivie en ajoutant à la fin de ta réponse une ligne "NOUVELLE_TACHE: ${agent.id} | <description courte de ce que tu feras>" — Adrien la validera avant qu'elle soit ajoutée au plan, c'est normal, ce n'est pas automatique.`
       const reply = await askAgent(
         agent.engine,
         `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ, l'espace de travail multi-agents d'Olivier. Ton rôle : ${agent.title}.\n\n${orgContext}\n\n${projectTeamText()}\n\n${realityText}\n\n${agentMemory}\n\nLe projet en cours s'appelle "${project?.name}". Ne parle QUE de ce qui relève de ton rôle ; si une question dépasse ton domaine, dis que c'est à un autre membre de l'ÉQUIPE DE CE PROJET de répondre (nomme-le). Ne connais et ne cite jamais un collègue qui n'est pas listé dans le contexte ci-dessus — s'inventer un nom est une faute grave.\n\nSi une décision de style, couleur, interface ou fonctionnalité est ambiguë et pas encore précisée par Olivier, NE DÉCIDE PAS seul — pose la question via "BESOIN_OLIVIER:" plutôt que d'inventer un choix.${managerTaskInstruction}\n\nSi tu écris du code, structure le projet PROFESSIONNELLEMENT comme un vrai projet tech (une seule arborescence cohérente, dossiers src/, un vrai README.md décrivant le projet — jamais la phrase brute d'Olivier recopiée telle quelle, package.json si pertinent). Utilise EXACTEMENT ce format pour chaque fichier :\nFICHIER: chemin/du/fichier.ext\n\`\`\`langage\ncontenu complet du fichier\n\`\`\`\nIMPORTANT : dans ta réponse visible (en dehors des blocs FICHIER et NOUVELLE_TACHE), ne recopie JAMAIS le code ni son contenu — Olivier ne veut pas le voir défiler dans le chat, seulement sur GitHub. Dis juste en une phrase ce que tu as fait. Tu n'es pas obligé d'utiliser Supabase/Vercel par défaut — propose la meilleure architecture selon le projet. Si une action nécessite qu'Olivier fasse quelque chose lui-même, termine ta réponse par une ligne "BESOIN_OLIVIER:" suivie des étapes précises numérotées. ${BESOIN_RULE} Si Olivier te demande un document, rédige-le entièrement en markdown.`,
@@ -276,13 +276,35 @@ CE QUE LE RESTE DE L'ÉQUIPE A FAIT (pas toi — n'en prends jamais le crédit) 
       const files = extractFilesFromMessage(reply)
       if (files.length > 0) await autoSaveAndPublish(files, agent.id)
 
-      if (true) {
-        const newTaskLines = [...reply.matchAll(/NOUVELLE_TACHE:\s*([a-z0-9-]+)\s*\|\s*(.+)/gi)]
-        if (newTaskLines.length > 0) {
-          const { count: existingCount } = await supabase.from('project_tasks').select('id', { count: 'exact', head: true }).eq('project_id', id)
-          const newTasks = newTaskLines.map((m, i) => ({ project_id: id, agent_id: m[1].trim(), description: m[2].trim(), sequence: (existingCount || 0) + i }))
-          await supabase.from('project_tasks').insert(newTasks)
-          await supabase.from('activity_log').insert({ project_id: id, label: `${agent.name} a ajouté ${newTasks.length} tâche(s) suite à la discussion` })
+      const newTaskLines = [...reply.matchAll(/NOUVELLE_TACHE:\s*([a-z0-9-]+)\s*\|\s*(.+)/gi)]
+      if (newTaskLines.length > 0) {
+        const { count: existingCount } = await supabase.from('project_tasks').select('id', { count: 'exact', head: true }).eq('project_id', id)
+        const proposed = newTaskLines.map((m, i) => ({ project_id: id, agent_id: m[1].trim(), description: m[2].trim(), sequence: (existingCount || 0) + i }))
+
+        if (agent.id === 'manager') {
+          // Adrien est déjà le validateur — pas besoin de repasser par lui-même
+          await supabase.from('project_tasks').insert(proposed)
+          await supabase.from('activity_log').insert({ project_id: id, label: `${agent.name} a ajouté ${proposed.length} tâche(s) suite à la discussion` })
+        } else {
+          // Toute tâche proposée par un autre agent doit être validée par Adrien avant d'exister vraiment
+          try {
+            const MANAGER = LEADERSHIP.find(a => a.id === 'manager')
+            const proposalText = proposed.map(p => `- ${p.agent_id} | ${p.description}`).join('\n')
+            const verdict = await askAgent(
+              MANAGER.engine,
+              `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\n${projectTeamText()}\n\n${agent.name} (${agent.role}) propose ces tâches pour le projet "${project?.name}" :\n${proposalText}\n\nTu es le seul à valider les tâches pour garder l'équipe cohérente. Pour chaque proposition, réponds sur une ligne séparée : APPROUVE: <description exacte> ou REJETTE: <description exacte> | <raison courte>.`,
+              [{ role: 'user', content: 'Valide ou rejette ces propositions maintenant.' }]
+            )
+            const approved = proposed.filter(p => new RegExp(`APPROUVE:\\s*${p.description.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i').test(verdict))
+            if (approved.length > 0) {
+              await supabase.from('project_tasks').insert(approved)
+              await supabase.from('activity_log').insert({ project_id: id, label: `${MANAGER.name} a validé ${approved.length} tâche(s) proposée(s) par ${agent.name}` })
+            }
+            const rejectedCount = proposed.length - approved.length
+            if (rejectedCount > 0) {
+              await supabase.from('activity_log').insert({ project_id: id, label: `${MANAGER.name} a refusé ${rejectedCount} proposition(s) de ${agent.name}` })
+            }
+          } catch (e) {}
         }
       }
 
