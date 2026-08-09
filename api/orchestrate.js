@@ -25,7 +25,7 @@ const POOL = [
 ]
 
 const HIERARCHY_TEXT = `HIÉRARCHIE : Olivier (CEO) → Adrien (Manager) → Gabriel(CTO)/Inès(CPO)/Élise(Finance)/Nadia(Juridique) → Chef de Projet par projet → Développeurs/UX-UI/QA/DevOps (rendent compte à leur Chef de Projet).`
-const PHILOSOPHY = `PHILOSOPHIE : ne jamais affirmer un fait sans le vérifier dans l'état réel fourni. Si tu ne sais pas, dis-le honnêtement plutôt que d'inventer. Face à une ambiguïté (style, fonctionnalité), pose une question précise via BESOIN_OLIVIER au lieu de deviner. Ce que tu livres doit être fini et propre. Prends la responsabilité de ton travail, ne rejette jamais une erreur sur un autre agent.`
+const PHILOSOPHY = `PHILOSOPHIE : ne jamais affirmer un fait sans le vérifier dans l'état réel fourni. Si tu ne sais pas, dis-le honnêtement plutôt que d'inventer. Face à une ambiguïté (style, fonctionnalité), pose une question précise via BESOIN_OLIVIER au lieu de deviner. Dis clairement ce qui est réalisable ou non, même si ça déçoit. Ce que tu livres doit être fini et propre. Prends la responsabilité de ton travail, ne rejette jamais une erreur sur un autre agent.`
 const BREVITY = "Réponds BRIÈVEMENT (2-5 phrases hors code), comme un message entre collègues, jamais un pavé."
 
 const KEYS = {
@@ -209,7 +209,7 @@ export default async function handler(req, res) {
       await supabase.from('project_tasks').update({ status: 'failed', result_summary: e.message, updated_at: new Date().toISOString() }).eq('id', task.id)
       await supabase.from('projects').update({ orchestration_paused: true }).eq('id', project.id)
       await supabase.from('dm_messages').insert({
-        agent_id: 'manager', author_id: 'manager',
+        agent_id: 'manager', author_id: 'manager', project_id: project.id,
         content: `Une tâche a échoué sur **${project.name}** ("${task.description}") : ${e.message}. J'ai mis le plan en pause, dis-moi comment tu veux continuer.`,
       })
       return res.status(200).json({ error: e.message, taskId: task.id })
@@ -239,7 +239,7 @@ export default async function handler(req, res) {
     if (needRaw && needRaw.trim()) {
       await supabase.from('projects').update({ orchestration_paused: true }).eq('id', project.id)
       await supabase.from('dm_messages').insert({
-        agent_id: agent.id, author_id: agent.id,
+        agent_id: agent.id, author_id: agent.id, project_id: project.id,
         content: `À propos du projet **${project.name}** :\n\n${needRaw.trim()}\n\n(Le plan est en pause en attendant, relance-le une fois fait.)`,
       })
     } else {
@@ -256,7 +256,7 @@ export default async function handler(req, res) {
           )
           if (/^TERMINE/i.test(evaluation.trim())) {
             await supabase.from('dm_messages').insert({
-              agent_id: 'manager', author_id: 'manager',
+              agent_id: 'manager', author_id: 'manager', project_id: project.id,
               content: `Le projet **${project.name}** est terminé et propre selon moi. Tu peux le marquer comme livré si tu es d'accord.`,
             })
           } else {
@@ -268,7 +268,7 @@ export default async function handler(req, res) {
               await supabase.from('activity_log').insert({ project_id: project.id, label: `${MANAGER.name} a ajouté ${newTasks.length} tâche(s) pour continuer le projet` })
             } else {
               await supabase.from('dm_messages').insert({
-                agent_id: 'manager', author_id: 'manager',
+                agent_id: 'manager', author_id: 'manager', project_id: project.id,
                 content: `J'ai fini le lot de tâches sur **${project.name}** mais je n'arrive pas à déterminer clairement la suite. Peux-tu regarder où ça en est ?`,
               })
             }

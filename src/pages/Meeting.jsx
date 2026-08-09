@@ -5,13 +5,23 @@ import { getOrgSnapshot, getAgentMemory } from '../lib/context'
 import { LEADERSHIP } from '../data/agents'
 import AgentAvatar from '../components/AgentAvatar'
 import ReactMarkdown from 'react-markdown'
-import { Send, Users2 } from 'lucide-react'
+import { Send, Users2, PlayCircle } from 'lucide-react'
+
+const FINANCE_KEYWORDS = ['budget', 'coût', 'cout', 'prix', 'rentab', 'monétis', 'monetis', 'argent', 'revenu', 'client', 'vendre', 'payant']
+const LEGAL_KEYWORDS = ['légal', 'legal', 'loi', 'contrat', 'rgpd', 'données personnelles', 'donnees personnelles', 'droit', 'licence', 'conformité', 'conformite']
+function detectConcernedAgent(text) {
+  const lower = text.toLowerCase()
+  if (LEGAL_KEYWORDS.some(k => lower.includes(k))) return 'legal'
+  if (FINANCE_KEYWORDS.some(k => lower.includes(k))) return 'finance'
+  return null
+}
 
 export default function Meeting() {
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [respondent, setRespondent] = useState('manager')
   const [sending, setSending] = useState(false)
+  const [signal, setSignal] = useState(null)
   const bottomRef = useRef(null)
 
   useEffect(() => {
@@ -55,6 +65,9 @@ export default function Meeting() {
         project_id: null,
         label: `Réunion — ${agent.name} : ${reply.slice(0, 80)}${reply.length > 80 ? '…' : ''}`,
       })
+
+      const concernedId = detectConcernedAgent(text + ' ' + reply)
+      setSignal(concernedId && concernedId !== agent.id ? LEADERSHIP.find(a => a.id === concernedId) : null)
     } catch (e) {
       setMessages(prev => [...prev, { id: 'err-' + Date.now(), author_id: 'system', author_name: 'Système', content: `Erreur : ${e.message}` }])
     } finally {
@@ -83,6 +96,17 @@ export default function Meeting() {
       </div>
 
       <div className="p-4 border-t border-[color:var(--color-line)]">
+        {signal && (
+          <div className="flex items-center justify-between gap-2 mb-2 px-3 py-2 rounded-lg bg-[color:var(--color-gold)]/10 border border-[color:var(--color-gold-dim)] text-xs">
+            <span>🖐 <strong>{signal.name}</strong> ({signal.role}) semble concerné par ce sujet</span>
+            <button
+              onClick={() => { setRespondent(signal.id); setSignal(null) }}
+              className="px-2 py-1 rounded-md bg-[color:var(--color-gold)] text-[color:var(--color-void)] font-medium shrink-0"
+            >
+              Donner la parole
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-2 mb-2">
           <span className="text-[11px] text-[color:var(--color-mute)]">Répond :</span>
           <select

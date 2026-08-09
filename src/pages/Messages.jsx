@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { askAgent } from '../lib/engines'
-import { getOrgSnapshot, getAgentMemory } from '../lib/context'
+import { getOrgSnapshot, getAgentMemory, getProjectReality } from '../lib/context'
 import { ALL_AGENTS, LEADERSHIP } from '../data/agents'
 import AgentAvatar from '../components/AgentAvatar'
 import ReactMarkdown from 'react-markdown'
-import { Send, Trash2 } from 'lucide-react'
+import { Send, Trash2, PlayCircle } from 'lucide-react'
 import { markThreadRead } from '../lib/notifications'
 
 export default function Messages() {
@@ -38,6 +38,8 @@ export default function Messages() {
   }, [activeId, threads])
 
   const currentThread = threads[activeId] || []
+  // Le projet le plus récent mentionné dans ce fil (les DM liées à un projet le sont automatiquement)
+  const linkedProjectId = [...currentThread].reverse().find(m => m.project_id)?.project_id
 
   async function deleteMessage(messageId) {
     if (typeof messageId === 'string' && messageId.startsWith('err-')) {
@@ -55,23 +57,29 @@ export default function Messages() {
     const text = input.trim()
     setInput('')
 
-    const userMsg = { agent_id: activeId, author_id: 'user', content: text }
+    const userMsg = { agent_id: activeId, author_id: 'user', content: text, project_id: linkedProjectId || null }
     const { data: saved } = await supabase.from('dm_messages').insert(userMsg).select().single()
     setThreads(prev => ({ ...prev, [activeId]: [...(prev[activeId] || []), saved] }))
+
+    // Ta réponse relance automatiquement le plan si un projet lié était en pause
+    if (linkedProjectId) {
+      await supabase.from('projects').update({ orchestration_paused: false }).eq('id', linkedProjectId)
+    }
 
     try {
       const history = [...currentThread, saved].slice(-20).map(m => ({
         role: m.author_id === 'user' ? 'user' : 'assistant',
         content: m.content,
       }))
+      const projectReality = linkedProjectId ? await getProjectReality(linkedProjectId, active.id) : ''
       const reply = await askAgent(
         active.engine,
-        `Tu es ${active.name}, "${active.role}" dans G-Tech HQ. C'est une conversation privée en tête-à-tête avec Olivier.\n\n${await getOrgSnapshot()}\n\n${await getAgentMemory(active.id, [saved.id])}\n\nRéponds comme un collègue de confiance : clair, synthétique, direct. Ne parle que de ce qui relève de ton rôle. Ne cite jamais un collègue qui n'existe pas dans le contexte ci-dessus. En français.`,
+        `Tu es ${active.name}, "${active.role}" dans G-Tech HQ. C'est une conversation privée en tête-à-tête avec Olivier.\n\n${await getOrgSnapshot()}\n\n${projectReality}\n\n${await getAgentMemory(active.id, [saved.id])}\n\nRéponds comme un collègue de confiance : clair, synthétique, direct. Ne parle que de ce qui relève de ton rôle. Ne cite jamais un collègue qui n'existe pas dans le contexte ci-dessus, et ne prétends jamais qu'un travail est fait ou qu'un lien existe si l'état réel du projet ci-dessus ne le confirme pas. En français.`,
         history
       )
       const { data: savedReply } = await supabase
         .from('dm_messages')
-        .insert({ agent_id: activeId, author_id: activeId, content: reply })
+        .insert({ agent_id: activeId, author_id: activeId, content: reply, project_id: linkedProjectId || null })
         .select()
         .single()
       setThreads(prev => ({ ...prev, [activeId]: [...(prev[activeId] || []), savedReply] }))
@@ -113,10 +121,15 @@ export default function Messages() {
       <div className="flex-1 flex flex-col min-w-0">
         <div className="px-6 py-4 border-b border-[color:var(--color-line)] flex items-center gap-3">
           <AgentAvatar agent={active} />
-          <div>
+          <div className="flex-1">
             <div className="font-display text-base">{active.name}</div>
             <div className="text-xs text-[color:var(--color-mute)]">{active.role}</div>
           </div>
+          {linkedProjectId && (
+            <div className="flex items-center gap-1.5 text-[10px] text-[color:var(--color-gold)]" title="Ta prochaine réponse relance le plan de ce projet s'il est en pause">
+              <PlayCircle size={13} /> Lié à un projet
+            </div>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-6 space-y-5">

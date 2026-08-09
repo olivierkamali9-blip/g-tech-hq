@@ -41,6 +41,7 @@ create table if not exists dm_messages (
   agent_id text not null,
   author_id text not null,
   content text not null,
+  project_id uuid references projects(id) on delete set null,
   created_at timestamptz default now()
 );
 

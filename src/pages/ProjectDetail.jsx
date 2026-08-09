@@ -41,6 +41,7 @@ export default function ProjectDetail() {
   const [respondent, setRespondent] = useState('manager')
   const [sending, setSending] = useState(false)
   const [advancing, setAdvancing] = useState(false)
+  const [signal, setSignal] = useState(null)
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const bottomRef = useRef(null)
@@ -235,7 +236,7 @@ CE QUE LE RESTE DE L'ÉQUIPE A FAIT (pas toi — n'en prends jamais le crédit) 
 
       if (needRaw && needRaw.trim()) {
         await supabase.from('dm_messages').insert({
-          agent_id: agent.id, author_id: agent.id,
+          agent_id: agent.id, author_id: agent.id, project_id: id,
           content: `À propos du projet **${project.name}** :\n\n${needRaw.trim()}`,
         })
       }
@@ -243,18 +244,9 @@ CE QUE LE RESTE DE L'ÉQUIPE A FAIT (pas toi — n'en prends jamais le crédit) 
       const concernedId = detectConcernedAgent(text + ' ' + reply)
       if (concernedId && concernedId !== agent.id) {
         const concerned = LEADERSHIP.find(a => a.id === concernedId)
-        try {
-          const [chimeOrg, chimeMemory, chimeReality] = await Promise.all([getOrgSnapshot(), getAgentMemory(concerned.id), projectRealityText(concerned.id)])
-          const chimeIn = await askAgent(
-            concerned.engine,
-            `Tu es ${concerned.name}, "${concerned.role}" dans G-Tech HQ. ${chimeOrg}\n\n${projectTeamText()}\n\n${chimeReality}\n\n${chimeMemory}\n\nTu n'as pas été sollicité directement, mais ce qui vient d'être dit dans le projet "${project?.name}" touche à ton domaine (${concerned.title}). Interviens brièvement seulement si tu as un point pertinent — reste concis. En français.`,
-            [...history, { role: 'assistant', content: reply }]
-          )
-          const { data: savedChime } = await supabase.from('messages').insert({
-            project_id: id, author_id: concerned.id, author_name: concerned.name, content: chimeIn,
-          }).select().single()
-          setMessages(prev => [...prev, savedChime])
-        } catch (e) {}
+        setSignal(concerned)
+      } else {
+        setSignal(null)
       }
     } catch (e) {
       setMessages(prev => [...prev, { id: 'err-' + Date.now(), author_id: 'system', author_name: 'Système', content: `Erreur : ${e.message}` }])
@@ -295,7 +287,7 @@ CE QUE LE RESTE DE L'ÉQUIPE A FAIT (pas toi — n'en prends jamais le crédit) 
 
       if (needPart && needPart.trim()) {
         await supabase.from('dm_messages').insert({
-          agent_id: MANAGER.id, author_id: MANAGER.id,
+          agent_id: MANAGER.id, author_id: MANAGER.id, project_id: id,
           content: `À propos du projet **${project.name}** : ${needPart.trim()}`,
         })
       }
@@ -368,6 +360,17 @@ CE QUE LE RESTE DE L'ÉQUIPE A FAIT (pas toi — n'en prends jamais le crédit) 
         </div>
 
         <div className="p-4 border-t border-[color:var(--color-line)]">
+          {signal && (
+            <div className="flex items-center justify-between gap-2 mb-2 px-3 py-2 rounded-lg bg-[color:var(--color-gold)]/10 border border-[color:var(--color-gold-dim)] text-xs">
+              <span>🖐 <strong>{signal.name}</strong> ({signal.role}) semble concerné par ce sujet</span>
+              <button
+                onClick={() => { setRespondent(signal.id); setSignal(null) }}
+                className="px-2 py-1 rounded-md bg-[color:var(--color-gold)] text-[color:var(--color-void)] font-medium shrink-0"
+              >
+                Donner la parole
+              </button>
+            </div>
+          )}
           <div className="flex items-center gap-2 mb-2">
             <span className="text-[11px] text-[color:var(--color-mute)]">Répond :</span>
             <select
