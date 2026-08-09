@@ -160,7 +160,10 @@ async function buildContext(projectId) {
     const otherFiles = (files || []).filter(f => f.agent_id !== forAgentId).map(f => f.path)
     const myTasks = (allTasks || []).filter(t => t.agent_id === forAgentId)
     const repoText = project?.github_repo ? `Repo GitHub réel : github.com/olivierkamali9-blip/${project.github_repo}` : "AUCUN repo GitHub n'existe encore."
-    return `--- ÉTAT RÉEL DU PROJET (vérité absolue) ---\n${repoText}\nCE QUE TOI PRÉCISÉMENT AS FAIT : ${myFiles.length ? myFiles.join(', ') : "RIEN encore — dis-le honnêtement si on te le demande."}\nTES TÂCHES À TOI : ${myTasks.length ? myTasks.map(t => `[${t.status}] ${t.description}`).join(' | ') : 'aucune tâche ne t\'a été assignée.'}\nCE QUE LE RESTE DE L'ÉQUIPE A FAIT (pas toi) : ${otherFiles.length ? otherFiles.join(', ') : 'rien encore'}\n--- FIN ---`
+    const vercelText = project?.vercel_url
+      ? `Site en ligne réel : ${project.vercel_url}`
+      : "AUCUN site déployé — NE DONNE JAMAIS de lien Vercel tant que ce champ est vide. Le déploiement est une action manuelle unique d'Olivier (import du repo sur vercel.com). Si le code est prêt à déployer, explique-lui via BESOIN_OLIVIER, précisément : 1) aller sur vercel.com et se connecter avec son compte GitHub habituel, 2) cliquer Add New > Project, 3) chercher et importer le repo '${project?.github_repo || '(pas encore créé)'}', 4) laisser les réglages par défaut et cliquer Deploy, 5) une fois prêt, coller le lien obtenu dans le panneau Livraison du projet."
+    return `--- ÉTAT RÉEL DU PROJET (vérité absolue) ---\n${repoText}\n${vercelText}\nCE QUE TOI PRÉCISÉMENT AS FAIT : ${myFiles.length ? myFiles.join(', ') : "RIEN encore — dis-le honnêtement si on te le demande."}\nTES TÂCHES À TOI : ${myTasks.length ? myTasks.map(t => `[${t.status}] ${t.description}`).join(' | ') : 'aucune tâche ne t\'a été assignée.'}\nCE QUE LE RESTE DE L'ÉQUIPE A FAIT (pas toi) : ${otherFiles.length ? otherFiles.join(', ') : 'rien encore'}\n--- FIN ---`
   }
 
   return {
@@ -248,7 +251,7 @@ export default async function handler(req, res) {
           const MANAGER = LEADERSHIP.find(a => a.id === 'manager')
           const evaluation = await askAgent(
             MANAGER.engine,
-            `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${ctx.orgText}\n\n${ctx.teamText}\n\n${ctx.realityFor(MANAGER.id)}\n\nToutes les tâches prévues pour "${project.name}" sont terminées. Le projet est-il vraiment propre et fini (structure correcte, fonctionnalités de base réellement présentes dans les fichiers réels listés), ou reste-t-il du travail concret à faire ? Si le projet est vraiment fini, réponds UNIQUEMENT: TERMINE. Sinon, réponds UNIQUEMENT avec 2 à 6 nouvelles tâches concrètes au format (une par ligne, agents réels de l'équipe uniquement) :\nTACHE: <id de l'agent> | <description courte>`,
+            `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${ctx.orgText}\n\n${ctx.teamText}\n\n${ctx.realityFor(MANAGER.id)}\n\nToutes les tâches prévues pour "${project.name}" sont terminées. Le projet est-il vraiment propre et fini — c'est-à-dire une VRAIE application qui peut se lancer (fichiers de config/build présents, squelette cohérent, pas juste des morceaux isolés), avec ses fonctionnalités de base réellement présentes dans les fichiers réels listés — ou reste-t-il du travail concret à faire ? Si des fichiers essentiels manquent pour que ça tourne vraiment (package.json, point d'entrée...), ce n'est PAS fini. Si le projet est vraiment fini, réponds UNIQUEMENT: TERMINE. Sinon, réponds UNIQUEMENT avec 2 à 6 nouvelles tâches concrètes au format (une par ligne, agents réels de l'équipe uniquement) :\nTACHE: <id de l'agent> | <description courte>`,
             'Évalue et décide maintenant.'
           )
           if (/^TERMINE/i.test(evaluation.trim())) {

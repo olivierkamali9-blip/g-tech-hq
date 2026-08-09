@@ -100,9 +100,13 @@ export default function ProjectDetail() {
     const repoText = project.github_repo
       ? `Repo GitHub réel : github.com/olivierkamali9-blip/${project.github_repo}`
       : "AUCUN repo GitHub n'existe encore pour ce projet."
+    const vercelText = project.vercel_url
+      ? `Site en ligne réel : ${project.vercel_url}`
+      : "AUCUN site n'est déployé — NE DONNE JAMAIS un lien Vercel à Olivier tant que ce champ est vide, même si le repo existe. Le déploiement Vercel est une action manuelle unique qu'Olivier doit faire lui-même (import du repo sur vercel.com) — si le code est prêt, explique-lui ça précisément via BESOIN_OLIVIER."
 
     return `--- ÉTAT RÉEL DU PROJET (vérité absolue — ne dis JAMAIS avoir fait quelque chose que TOI n'as pas fait) ---
 ${repoText}
+${vercelText}
 CE QUE TOI PRÉCISÉMENT AS RÉELLEMENT FAIT : ${myFiles.length ? myFiles.join(', ') : "RIEN encore — si on te demande ce que tu as fait, dis honnêtement que tu n'as encore rien produit."}
 TES TÂCHES À TOI : ${myTasks.length ? myTasks.map(t => `[${t.status}] ${t.description}`).join(' | ') : "Aucune tâche ne t'a été assignée sur ce projet pour l'instant — dis-le clairement si on te le demande, ne réponds pas comme si tu avais travaillé."}
 CE QUE LE RESTE DE L'ÉQUIPE A FAIT (pas toi — n'en prends jamais le crédit) : ${otherFiles.length ? otherFiles.join(', ') : 'rien encore'}${otherDoneTasks.length ? ' | tâches faites par d\'autres : ' + otherDoneTasks.map(t => t.description).join(', ') : ''}
@@ -145,7 +149,7 @@ CE QUE LE RESTE DE L'ÉQUIPE A FAIT (pas toi — n'en prends jamais le crédit) 
       const orgContext = await getOrgSnapshot()
       const raw = await askAgent(
         MANAGER.engine,
-        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\n${projectTeamText()}\n\nOlivier vient de lancer le travail sur "${currentProject.name}" (${currentProject.description}). Découpe ce projet en 4 à 10 tâches concrètes, actionnables, dans l'ordre logique d'exécution. RÈGLE STRICTE : si des agents sont listés dans MEMBRES SOUS SA SUPERVISION ci-dessus, la majorité des tâches DOIVENT leur être assignées à EUX (utilise leurs id exacts), pas à toi-même — tu ne t'assignes des tâches à toi-même QUE si aucun agent n'est assigné au projet, ou pour les étapes de coordination/validation qui te reviennent vraiment. Insère aussi une tâche de validation assignée au bon responsable de la Direction (cto pour l'architecture/technique, cpo pour les fonctionnalités/produit, finance si impact financier notable, legal si conformité/licence en jeu) quand c'est pertinent. Réponds UNIQUEMENT avec ce format, une ligne par tâche, rien d'autre :\nTACHE: <id de l'agent> | <description courte et actionnable>`,
+        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${orgContext}\n\n${projectTeamText()}\n\nOlivier vient de lancer le travail sur "${currentProject.name}" (${currentProject.description}). Découpe ce projet en 4 à 10 tâches concrètes, actionnables, dans l'ordre logique d'exécution. RÈGLE ABSOLUE N°1 : la toute première tâche doit TOUJOURS être de poser les fondations techniques réelles et exécutables du projet (choix de la stack, fichier de config/build comme package.json, point d'entrée de l'application) — jamais des morceaux isolés (un composant par-ci, une route par-là) sans squelette qui les relie. Une "application" n'existe que si elle peut vraiment se lancer. RÈGLE N°2 : si des agents sont listés dans MEMBRES SOUS SA SUPERVISION ci-dessus, la majorité des tâches DOIVENT leur être assignées à EUX (utilise leurs id exacts), pas à toi-même — tu ne t'assignes des tâches à toi-même QUE si aucun agent n'est assigné au projet, ou pour les étapes de coordination/validation qui te reviennent vraiment. Insère aussi une tâche de validation assignée au bon responsable de la Direction (cto pour l'architecture/technique, cpo pour les fonctionnalités/produit, finance si impact financier notable, legal si conformité/licence en jeu) quand c'est pertinent. Réponds UNIQUEMENT avec ce format, une ligne par tâche, rien d'autre :\nTACHE: <id de l'agent> | <description courte et actionnable>`,
         [{ role: 'user', content: 'Découpe le projet en tâches maintenant.' }]
       )
       const lines = [...raw.matchAll(/TACHE:\s*([a-z0-9-]+)\s*\|\s*(.+)/gi)]
