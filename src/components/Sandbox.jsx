@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { WebContainer } from '@webcontainer/api'
 import { supabase } from '../lib/supabase'
 import { askAgent } from '../lib/engines'
@@ -32,6 +32,18 @@ export default function Sandbox({ project, agent }) {
   const [log, setLog] = useState('')
   const [previewUrl, setPreviewUrl] = useState(null)
   const logRef = useRef(null)
+  const attemptRef = useRef(0)
+  const MAX_ATTEMPTS = 3
+
+  useEffect(() => {
+    // Se lance automatiquement à l'ouverture du projet, pas besoin de cliquer à chaque fois
+    let cancelled = false
+    supabase.from('project_files').select('id', { count: 'exact', head: true }).eq('project_id', project.id).then(({ count }) => {
+      if (!cancelled && count > 0) runOnce(1)
+    })
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [project.id])
 
   function appendLog(chunk) {
     setLog(prev => (prev + chunk).slice(-6000))
@@ -39,9 +51,10 @@ export default function Sandbox({ project, agent }) {
   }
 
   async function runOnce(attempt = 1) {
+    attemptRef.current = attempt
     setStatus('booting')
     setPreviewUrl(null)
-    appendLog(`\n--- Tentative ${attempt} ---\n`)
+    appendLog(`\n--- Tentative ${attempt}/${MAX_ATTEMPTS} ---\n`)
 
     const { data: files } = await supabase.from('project_files').select('path, content').eq('project_id', project.id)
     if (!files || files.length === 0) {
@@ -66,7 +79,12 @@ export default function Sandbox({ project, agent }) {
     const installCode = await install.exit
     if (installCode !== 0) {
       appendLog(`\n❌ npm install a échoué (code ${installCode})\n`)
-      await tryAutoFix(files, log)
+      if (attemptRef.current < MAX_ATTEMPTS) {
+        await tryAutoFix(files, log)
+      } else {
+        appendLog(`\n⏹ Abandon après ${MAX_ATTEMPTS} tentatives.\n`)
+        setStatus('error')
+      }
       return
     }
 
@@ -81,16 +99,20 @@ export default function Sandbox({ project, agent }) {
       setStatus('running')
     })
 
-    // Si rien ne démarre après un moment, on considère que ça a probablement échoué silencieusement
+    // Si rien ne démarre après un long moment (npm install peut être lent au premier lancement), on considère un échec
     setTimeout(() => {
       setStatus(s => {
         if (s === 'running' && !previewUrl) {
-          tryAutoFix(files, log)
+          if (attemptRef.current < MAX_ATTEMPTS) {
+            tryAutoFix(files, log)
+          } else {
+            appendLog(`\n⏹ Abandon après ${MAX_ATTEMPTS} tentatives — regarde le log ci-dessus, il faudra probablement une correction manuelle.\n`)
+          }
           return 'error'
         }
         return s
       })
-    }, 25000)
+    }, 45000)
   }
 
   async function tryAutoFix(files, currentLog) {
@@ -125,7 +147,7 @@ export default function Sandbox({ project, agent }) {
       await supabase.from('activity_log').insert({ project_id: project.id, label: `${agent.name} a corrigé ${fixedFiles.length} fichier(s) après un test réel échoué` })
       appendLog(`${fixedFiles.length} fichier(s) corrigé(s), nouvel essai...\n`)
       setStatus('fixed')
-      setTimeout(() => runOnce(2), 800)
+      setTimeout(() => runOnce(attemptRef.current + 1), 800)
     } catch (e) {
       appendLog(`Erreur pendant la correction : ${e.message}\n`)
       setStatus('error')
@@ -149,9 +171,14 @@ export default function Sandbox({ project, agent }) {
       </div>
 
       {log && (
-        <pre ref={logRef} className="bg-black/40 border border-[color:var(--color-line)] rounded-lg p-3 text-[10px] font-mono text-[color:var(--color-ivory-dim)] max-h-48 overflow-y-auto whitespace-pre-wrap mb-2">
-          {log}
-        </pre>
+        <>
+          {status === 'running' && previewUrl && (
+            <p className="text-[10px] text-[color:var(--color-good)] mb-1">✅ Le serveur tourne — le défilement continu est normal, un serveur ne s'arrête jamais tout seul.</p>
+          )}
+          <pre ref={logRef} className="bg-black/40 border border-[color:var(--color-line)] rounded-lg p-3 text-[10px] font-mono text-[color:var(--color-ivory-dim)] max-h-48 overflow-y-auto whitespace-pre-wrap mb-2">
+            {log}
+          </pre>
+        </>
       )}
 
       {previewUrl && (
