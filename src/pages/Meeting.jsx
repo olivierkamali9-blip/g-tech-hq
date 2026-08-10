@@ -70,8 +70,19 @@ export default function Meeting() {
         label: `Réunion — ${agent.name} : ${reply.slice(0, 80)}${reply.length > 80 ? '…' : ''}`,
       })
 
-      const concernedId = detectConcernedAgent(text + ' ' + reply)
-      setSignal(concernedId && concernedId !== agent.id ? LEADERSHIP.find(a => a.id === concernedId) : null)
+      const candidates = LEADERSHIP.filter(a => a.id !== agent.id)
+      try {
+        const candidateList = candidates.map(a => `${a.id} = ${a.name} (${a.role})`).join('\n')
+        const verdict = await askAgent(
+          agent.engine,
+          `Voici les autres membres de la Direction :\n${candidateList}\n\nDernier échange :\nOlivier : ${text}\n${agent.name} : ${reply}\n\nUn de ces agents a-t-il vraiment quelque chose d'IMPORTANT à ajouter — un problème détecté dans son domaine, une suggestion concrète, ou une proposition à valider ? Ne signale pas pour un commentaire trivial. Réponds UNIQUEMENT l'id exact de l'agent concerné, ou NON.`,
+          [{ role: 'user', content: 'Évalue maintenant, en un mot.' }]
+        )
+        const matchId = candidates.find(a => new RegExp(`\\b${a.id}\\b`, 'i').test(verdict))?.id
+        setSignal(matchId ? candidates.find(a => a.id === matchId) : null)
+      } catch (e) {
+        setSignal(null)
+      }
     } catch (e) {
       setMessages(prev => [...prev, { id: 'err-' + Date.now(), author_id: 'system', author_name: 'Système', content: `Erreur : ${e.message}` }])
     } finally {

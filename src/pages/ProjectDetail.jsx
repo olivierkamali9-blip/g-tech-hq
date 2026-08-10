@@ -324,8 +324,21 @@ CE QUE LE RESTE DE L'ÉQUIPE A FAIT (pas toi — n'en prends jamais le crédit) 
       }
 
       const candidates = respondable.filter(a => a.id !== agent.id)
-      const concerned = detectConcernedAgent(text + ' ' + reply, candidates)
-      setSignal(concerned)
+      if (candidates.length > 0) {
+        try {
+          const MANAGER = LEADERSHIP.find(a => a.id === 'manager')
+          const candidateList = candidates.map(a => `${a.id} = ${a.name} (${a.role})`).join('\n')
+          const verdict = await askAgent(
+            MANAGER.engine,
+            `Voici l'équipe disponible pour ce projet :\n${candidateList}\n\nDernier échange :\nOlivier : ${text}\n${agent.name} : ${reply}\n\nUn de ces agents a-t-il vraiment quelque chose d'IMPORTANT à ajouter — un problème détecté dans son domaine d'expertise, une suggestion concrète et utile, ou une proposition de tâche/validation ? Ne signale PAS pour un simple commentaire ou une remarque triviale hors-sujet. Réponds UNIQUEMENT avec l'id exact de l'agent concerné, ou NON s'il n'y a vraiment rien d'important à ajouter.`,
+            [{ role: 'user', content: 'Évalue maintenant, en un mot.' }]
+          )
+          const matchId = candidates.find(a => new RegExp(`\\b${a.id}\\b`, 'i').test(verdict))?.id
+          setSignal(matchId ? candidates.find(a => a.id === matchId) : null)
+        } catch (e) {
+          setSignal(null)
+        }
+      }
     } catch (e) {
       setMessages(prev => [...prev, { id: 'err-' + Date.now(), author_id: 'system', author_name: 'Système', content: `Erreur : ${e.message}` }])
     } finally {

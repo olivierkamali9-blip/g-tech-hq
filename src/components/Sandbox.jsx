@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase'
 import { askAgent } from '../lib/engines'
 import { getOrgSnapshot, getProjectReality, QUALITY_STANDARD } from '../lib/context'
 import { extractFilesFromMessage, stripFileBlocks } from '../lib/codeParser'
-import { Play, Loader2, TerminalSquare, RefreshCw } from 'lucide-react'
+import { Play, Loader2, TerminalSquare } from 'lucide-react'
 
 let containerInstance = null // une seule instance WebContainer à la fois dans l'onglet, réutilisée
 
@@ -164,9 +164,10 @@ export default function Sandbox({ project, agent }) {
           onClick={() => runOnce(1)}
           disabled={status === 'booting' || status === 'installing' || status === 'running'}
           className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-[color:var(--color-gold-dim)] text-[color:var(--color-gold-bright)] hover:bg-[color:var(--color-gold)]/10 disabled:opacity-50"
+          title="Relance le test complet depuis le début"
         >
           {['booting', 'installing'].includes(status) ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
-          Tester maintenant
+          Relancer le test
         </button>
       </div>
 
@@ -183,9 +184,8 @@ export default function Sandbox({ project, agent }) {
 
       {previewUrl && (
         <div className="border border-[color:var(--color-line)] rounded-lg overflow-hidden">
-          <div className="flex items-center justify-between px-2 py-1.5 bg-[color:var(--color-surface)] text-[10px] text-[color:var(--color-mute)]">
-            <span>Aperçu en direct</span>
-            <button onClick={() => runOnce(1)} className="hover:text-[color:var(--color-gold)]"><RefreshCw size={11} /></button>
+          <div className="px-2 py-1.5 bg-[color:var(--color-surface)] text-[10px] text-[color:var(--color-mute)]">
+            Aperçu en direct
           </div>
           <iframe src={previewUrl} title="Aperçu" className="w-full h-64 bg-white" />
         </div>
