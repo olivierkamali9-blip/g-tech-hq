@@ -15,6 +15,7 @@ import ProjectJournal from '../components/ProjectJournal'
 import DeliveryPanel from '../components/DeliveryPanel'
 import WorkPlanPanel from '../components/WorkPlanPanel'
 import LivePreview from '../components/LivePreview'
+import Sandbox from '../components/Sandbox'
 import CodeSandbox from '../components/CodeSandbox'
 import ReactMarkdown from 'react-markdown'
 import { Send, Eye, Trash2, Paperclip, X, Download, Zap, Pencil, Check } from 'lucide-react'
@@ -516,6 +517,7 @@ CE QUE LE RESTE DE L'ÉQUIPE A FAIT (pas toi — n'en prends jamais le crédit) 
         <AssignTeamPanel project={project} projectAgents={projectAgents} onUpdate={loadAll} />
         <CodeSandbox project={project} />
         <WorkPlanPanel project={project} onProjectUpdate={setProject} />
+        <Sandbox project={project} agent={allKnown.find(a => a.id === project.lead_agent_id) || LEADERSHIP.find(a => a.id === 'manager')} />
         <DeliveryPanel project={project} onProjectUpdate={setProject} />
         <ProjectJournal projectId={project.id} />
         <ProjectFiles project={project} onProjectUpdate={setProject} />
