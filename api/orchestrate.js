@@ -132,6 +132,7 @@ async function publishFiles(repoName, description, files) {
 }
 
 async function buildContext(projectId) {
+  const now = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   const [{ data: dyn }, { data: projects }, { data: activity }] = await Promise.all([
     supabase.from('custom_agents').select('*'),
     supabase.from('projects').select('id, name, status, lead_agent_id').order('created_at', { ascending: false }).limit(12),
@@ -172,7 +173,7 @@ async function buildContext(projectId) {
 
   return {
     allKnown, project,
-    orgText: `--- CONTEXTE G-TECH HQ ---\n${HIERARCHY_TEXT}\n${PHILOSOPHY}\nÉQUIPE : ${teamList}\nPROJETS : ${projectsList}\nACTIVITÉ RÉCENTE : ${activityList}\n${BREVITY}\n--- FIN ---`,
+    orgText: `--- CONTEXTE G-TECH HQ ---\nDATE RÉELLE D'AUJOURD'HUI : ${now} — ne fais jamais d'erreur de date.\n${HIERARCHY_TEXT}\n${PHILOSOPHY}\nÉQUIPE : ${teamList}\nPROJETS : ${projectsList}\nACTIVITÉ RÉCENTE : ${activityList}\n${BREVITY}\n--- FIN ---`,
     teamText, realityFor,
   }
 }
@@ -211,10 +212,9 @@ export default async function handler(req, res) {
       )
     } catch (e) {
       await supabase.from('project_tasks').update({ status: 'failed', result_summary: e.message, updated_at: new Date().toISOString() }).eq('id', task.id)
-      await supabase.from('projects').update({ orchestration_paused: true }).eq('id', project.id)
       await supabase.from('dm_messages').insert({
         agent_id: 'manager', author_id: 'manager', project_id: project.id,
-        content: `Une tâche a échoué sur **${project.name}** ("${task.description}") : ${e.message}. J'ai mis le plan en pause, dis-moi comment tu veux continuer.`,
+        content: `Une tâche a échoué sur **${project.name}** ("${task.description}") : ${e.message}. Le reste de l'équipe continue son travail normalement, mais cette tâche précise attend ton avis.`,
       })
       return res.status(200).json({ error: e.message, taskId: task.id })
     }
@@ -237,19 +237,24 @@ export default async function handler(req, res) {
       } catch (e) {}
     }
 
+    if (needRaw && needRaw.trim()) {
+      // Seule CETTE tâche est bloquée — le reste de l'équipe continue, personne n'attend après un seul agent
+      await supabase.from('project_tasks').update({ status: 'blocked', result_summary: 'En attente d\'Olivier', updated_at: new Date().toISOString() }).eq('id', task.id)
+      await supabase.from('dm_messages').insert({
+        agent_id: agent.id, author_id: agent.id, project_id: project.id,
+        content: `À propos du projet **${project.name}** :\n\n${needRaw.trim()}\n\n(Seule cette tâche est en attente, le reste de l'équipe continue de travailler — réponds ici pour la débloquer.)`,
+      })
+      return res.status(200).json({ done: false, blocked: true, taskId: task.id, agent: agent.name })
+    }
+
     await supabase.from('project_tasks').update({ status: 'done', result_summary: visiblePart.trim().slice(0, 150), updated_at: new Date().toISOString() }).eq('id', task.id)
     await supabase.from('activity_log').insert({ project_id: project.id, label: `${agent.name} a terminé : ${task.description.slice(0, 80)}` })
 
-    if (needRaw && needRaw.trim()) {
-      await supabase.from('projects').update({ orchestration_paused: true }).eq('id', project.id)
-      await supabase.from('dm_messages').insert({
-        agent_id: agent.id, author_id: agent.id, project_id: project.id,
-        content: `À propos du projet **${project.name}** :\n\n${needRaw.trim()}\n\n(Le plan est en pause en attendant, relance-le une fois fait.)`,
-      })
-    } else {
+    {
       const { count } = await supabase.from('project_tasks').select('id', { count: 'exact', head: true }).eq('project_id', project.id).in('status', ['pending', 'in_progress'])
-      if (count === 0) {
-        // Plus rien en attente : le Manager évalue si le projet est vraiment fini ou s'il faut continuer
+      const { count: blockedCount } = await supabase.from('project_tasks').select('id', { count: 'exact', head: true }).eq('project_id', project.id).eq('status', 'blocked')
+      if (count === 0 && blockedCount === 0) {
+        // Plus rien en attente ni en blocage : le Manager évalue si le projet est vraiment fini ou s'il faut continuer
         try {
           const ctx = await buildContext(project.id)
           const MANAGER = LEADERSHIP.find(a => a.id === 'manager')

@@ -2,13 +2,14 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { ALL_AGENTS } from '../data/agents'
 import { fetchDynamicAgents } from '../lib/dynamicAgents'
-import { ListChecks, Pause, Play, CheckCircle2, Circle, Loader2, XCircle } from 'lucide-react'
+import { ListChecks, Pause, Play, CheckCircle2, Circle, Loader2, XCircle, PauseCircle } from 'lucide-react'
 
 const ICONS = {
   pending: <Circle size={13} className="text-[color:var(--color-mute)]" />,
   in_progress: <Loader2 size={13} className="text-[color:var(--color-gold)] animate-spin" />,
   done: <CheckCircle2 size={13} className="text-[color:var(--color-good)]" />,
   failed: <XCircle size={13} className="text-[color:var(--color-danger)]" />,
+  blocked: <PauseCircle size={13} className="text-[color:var(--color-warn)]" />,
 }
 
 export default function WorkPlanPanel({ project, onProjectUpdate }) {

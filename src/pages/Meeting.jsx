@@ -57,7 +57,7 @@ export default function Meeting() {
       }))
       const reply = await askAgent(
         agent.engine,
-        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ. C'est l'espace Réunion — la discussion générale de l'organisation, pas liée à un projet précis. Les décisions prises ici orientent tout le reste.\n\n${await getOrgSnapshot()}\n\n${await getAgentMemory(agent.id, [saved.id])}\n\nRéponds comme un collègue de confiance : clair, synthétique, direct. Ne cite jamais un collègue qui n'existe pas dans le contexte ci-dessus. En français.`,
+        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ. C'est l'espace Réunion — la discussion générale de l'organisation, pas liée à un projet précis. Les décisions prises ici orientent tout le reste.\n\n${await getOrgSnapshot()}\n\n${await getAgentMemory(agent.id, [saved.id])}\n\nRÈGLE STRICTE : le contexte ci-dessus est TOUT ce que tu sais réellement. N'invente jamais de détails précis non listés — pas de nom d'outil (Slack, Notion...) non confirmé, pas de date précise sans certitude, pas d'évaluation de performance individuelle non vérifiée, pas de nombre d'agents différent de la liste réelle. Si on te demande un détail précis que tu n'as pas, dis honnêtement qu'il faut vérifier dans l'espace du projet concerné plutôt que d'improviser une réponse plausible. Réponds comme un collègue de confiance : clair, synthétique, direct. En français.`,
         history
       )
       const { data: savedReply } = await supabase.from('messages').insert({

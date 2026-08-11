@@ -28,6 +28,7 @@ const HIERARCHY_TEXT = `HIÉRARCHIE : Olivier (CEO, décisions stratégiques seu
 // Vue d'ensemble de l'organisation : équipe réelle, projets réels, dernières décisions.
 // Injecté dans CHAQUE appel à un agent pour qu'il ne parle jamais dans le vide. Volontairement compact pour économiser des tokens.
 export async function getOrgSnapshot() {
+  const now = new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
   const [{ data: projects }, { data: activity }, dynamicAgents] = await Promise.all([
     supabase.from('projects').select('id, name, status, lead_agent_id').order('created_at', { ascending: false }).limit(12),
     supabase.from('activity_log').select('label, created_at').order('created_at', { ascending: false }).limit(5),
@@ -46,6 +47,7 @@ export async function getOrgSnapshot() {
     : 'rien de récent.'
 
   return `--- CONTEXTE G-TECH HQ (ne jamais inventer au-delà) ---
+DATE RÉELLE D'AUJOURD'HUI : ${now} — ne fais jamais d'erreur de date, ne confonds jamais avec une autre date, calcule les échéances à partir de CETTE date précise.
 ${HIERARCHY_TEXT}
 ${PHILOSOPHY}
 ÉQUIPE RÉELLE : ${teamList}

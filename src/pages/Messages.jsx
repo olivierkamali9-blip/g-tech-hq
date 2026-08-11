@@ -69,9 +69,9 @@ export default function Messages() {
     const { data: saved } = await supabase.from('dm_messages').insert(userMsg).select().single()
     setThreads(prev => ({ ...prev, [activeId]: [...(prev[activeId] || []), saved] }))
 
-    // Ta réponse relance automatiquement le plan si un projet lié était en pause
+    // Ta réponse relance automatiquement les tâches bloquées de ce projet (elles seules, pas les autres)
     if (linkedProjectId) {
-      await supabase.from('projects').update({ orchestration_paused: false }).eq('id', linkedProjectId)
+      await supabase.from('project_tasks').update({ status: 'pending' }).eq('project_id', linkedProjectId).eq('status', 'blocked')
     }
 
     try {
@@ -137,7 +137,7 @@ export default function Messages() {
             <div className="text-xs text-[color:var(--color-mute)]">{active.role}</div>
           </div>
           {linkedProjectId && (
-            <div className="flex items-center gap-1.5 text-[10px] text-[color:var(--color-gold)]" title="Ta prochaine réponse relance le plan de ce projet s'il est en pause">
+            <div className="flex items-center gap-1.5 text-[10px] text-[color:var(--color-gold)]" title="Ta prochaine réponse débloque les tâches en attente de ce projet">
               <PlayCircle size={13} /> Lié à un projet
             </div>
           )}
