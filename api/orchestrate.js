@@ -15,6 +15,7 @@ const LEADERSHIP = [
   { id: 'legal', name: 'Nadia', role: 'Juridique', engine: 'groq', title: 'Valide la conformité légale' },
 ]
 const BUDGET_RULE = `RÈGLE BUDGET : tous les projets de G-Tech HQ visent le ZÉRO-COÛT par défaut (services gratuits uniquement, comme les moteurs IA utilisés ici). Si une tâche ou un choix technique nécessite un outil, service ou abonnement payant, ne le fais pas sans validation d'Élise (Finance) — mentionne-le explicitement et propose une alternative gratuite en priorité.`
+const PLAIN_LANGUAGE = `Olivier n'est PAS un développeur technique — ne lui parle jamais en jargon. Explique toujours ce que tu as fait en langage simple et concret, comme à quelqu'un qui ne code pas mais comprend très bien les choses expliquées clairement : dis ce que ça change concrètement, pas comment techniquement tu l'as fait. Jamais de phrase robotique creuse.`
 const POOL = [
   { id: 'backend-1', name: 'Julien', role: 'Développeur Backend', engine: 'mistral' },
   { id: 'frontend-1', name: 'Sacha', role: 'Développeur Frontend', engine: 'groq' },
@@ -101,7 +102,7 @@ function extractFiles(text) {
 }
 function stripFileBlocks(text) {
   const cleaned = text.replace(/FICHIER:\s*\S+\s*\n```[a-zA-Z0-9]*\n[\s\S]*?```/g, '').trim()
-  return cleaned || 'Fichier mis à jour — disponible sur GitHub.'
+  return cleaned || 'C\'est fait — je viens d\'avancer sur le projet, tu peux voir le résultat sur GitHub si tu veux jeter un œil.'
 }
 function slugify(name) {
   return name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 50) || 'projet'
@@ -208,7 +209,7 @@ export default async function handler(req, res) {
     try {
       reply = await askAgent(
         agent.engine,
-        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ. Ton rôle : ${agent.title || agent.role}.\n\n${orgText}\n\n${teamText}\n\n${realityFor(agent.id)}\n\n${BUDGET_RULE}\n\nProjet : "${project.name}" (${project.description}). Ta tâche assignée : "${task.description}". Exécute-la maintenant, directement, sans demander confirmation pour ce qui est purement technique. MAIS si un choix de style, couleur, interface ou fonctionnalité est ambigu et qu'Olivier ne l'a pas précisé, NE DÉCIDE PAS seul — termine par "BESOIN_OLIVIER:" et pose la question précisément au lieu d'inventer un choix. Si tu écris du code, ${QUALITY_STANDARD} Utilise EXACTEMENT :\nFICHIER: chemin/fichier.ext\n\`\`\`langage\ncontenu\n\`\`\`\nNe recopie jamais le code hors de ce format. SEULEMENT si tu as absolument besoin d'Olivier (compte, SQL...), termine par "BESOIN_OLIVIER:" suivi des étapes numérotées. ${BESOIN_RULE}`,
+        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ. Ton rôle : ${agent.title || agent.role}.\n\n${orgText}\n\n${teamText}\n\n${realityFor(agent.id)}\n\n${BUDGET_RULE}\n\nProjet : "${project.name}" (${project.description}). Ta tâche assignée : "${task.description}". Exécute-la maintenant, directement, sans demander confirmation pour ce qui est purement technique. MAIS si un choix de style, couleur, interface ou fonctionnalité est ambigu et qu'Olivier ne l'a pas précisé, NE DÉCIDE PAS seul — termine par "BESOIN_OLIVIER:" et pose la question précisément au lieu d'inventer un choix. Si tu écris du code, ${QUALITY_STANDARD} Utilise EXACTEMENT :\nFICHIER: chemin/fichier.ext\n\`\`\`langage\ncontenu\n\`\`\`\nNe recopie jamais le code hors de ce format. ${PLAIN_LANGUAGE} SEULEMENT si tu as absolument besoin d'Olivier (compte, SQL...), termine par "BESOIN_OLIVIER:" suivi des étapes numérotées. ${BESOIN_RULE}`,
         'Exécute cette tâche maintenant.'
       )
     } catch (e) {

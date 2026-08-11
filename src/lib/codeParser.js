@@ -19,5 +19,5 @@ export function extractFilesFromMessage(text) {
 // même si l'agent a oublié la consigne de ne pas les recopier visiblement.
 export function stripFileBlocks(text) {
   const cleaned = text.replace(/FICHIER:\s*\S+\s*\n```[a-zA-Z0-9]*\n[\s\S]*?```/g, '').trim()
-  return cleaned || 'Fichiers mis à jour — disponibles sur GitHub.'
+  return cleaned || 'C\'est fait — je viens de mettre à jour le projet, tu peux voir le résultat sur GitHub si tu veux jeter un œil.'
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { askAgent } from '../lib/engines'
-import { getOrgSnapshot, getAgentMemory, getProjectReality } from '../lib/context'
+import { getOrgSnapshot, getAgentMemory, getProjectReality, PLAIN_LANGUAGE } from '../lib/context'
 import { ALL_AGENTS, LEADERSHIP } from '../data/agents'
 import AgentAvatar from '../components/AgentAvatar'
 import ReactMarkdown from 'react-markdown'
@@ -82,7 +82,7 @@ export default function Messages() {
       const projectReality = linkedProjectId ? await getProjectReality(linkedProjectId, active.id) : ''
       const reply = await askAgent(
         active.engine,
-        `Tu es ${active.name}, "${active.role}" dans G-Tech HQ. C'est une conversation privée en tête-à-tête avec Olivier.\n\n${await getOrgSnapshot()}\n\n${projectReality}\n\n${await getAgentMemory(active.id, [saved.id])}\n\nRéponds comme un collègue de confiance : clair, synthétique, direct. Ne parle que de ce qui relève de ton rôle. Ne cite jamais un collègue qui n'existe pas dans le contexte ci-dessus, et ne prétends jamais qu'un travail est fait ou qu'un lien existe si l'état réel du projet ci-dessus ne le confirme pas. En français.`,
+        `Tu es ${active.name}, "${active.role}" dans G-Tech HQ. C'est une conversation privée en tête-à-tête avec Olivier.\n\n${await getOrgSnapshot()}\n\n${projectReality}\n\n${await getAgentMemory(active.id, [saved.id])}\n\n${PLAIN_LANGUAGE}\n\nRéponds comme un collègue de confiance : clair, synthétique, direct. Ne parle que de ce qui relève de ton rôle. Ne cite jamais un collègue qui n'existe pas dans le contexte ci-dessus, et ne prétends jamais qu'un travail est fait ou qu'un lien existe si l'état réel du projet ci-dessus ne le confirme pas. En français.`,
         history
       )
       const { data: savedReply } = await supabase
