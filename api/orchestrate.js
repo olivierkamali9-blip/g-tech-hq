@@ -8,12 +8,13 @@ const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SU
 const GITHUB_OWNER = 'olivierkamali9-blip'
 
 const LEADERSHIP = [
-  { id: 'manager', name: 'Adrien', role: 'Manager', engine: 'gemini' },
-  { id: 'cto', name: 'Gabriel', role: 'CTO', engine: 'mistral' },
-  { id: 'cpo', name: 'Inès', role: 'CPO', engine: 'gemini' },
-  { id: 'finance', name: 'Élise', role: 'Finance & Stratégie', engine: 'mistral' },
-  { id: 'legal', name: 'Nadia', role: 'Juridique', engine: 'groq' },
+  { id: 'manager', name: 'Adrien', role: 'Manager', engine: 'gemini', title: 'Coordonne toute l\'organisation, valide en dernier ressort' },
+  { id: 'cto', name: 'Gabriel', role: 'CTO', engine: 'mistral', title: 'Valide l\'architecture technique' },
+  { id: 'cpo', name: 'Inès', role: 'CPO', engine: 'gemini', title: 'Valide les fonctionnalités et priorités produit' },
+  { id: 'finance', name: 'Élise', role: 'Finance & Stratégie', engine: 'mistral', title: 'Valide les impacts financiers, veille à ce que TOUT reste gratuit ou au moindre coût possible (les projets G-Tech HQ visent le zéro-coût par défaut) — signale immédiatement toute suggestion payante avec son prix réel exact et propose systématiquement l\'alternative gratuite ou la moins chère' },
+  { id: 'legal', name: 'Nadia', role: 'Juridique', engine: 'groq', title: 'Valide la conformité légale' },
 ]
+const BUDGET_RULE = `RÈGLE BUDGET : tous les projets de G-Tech HQ visent le ZÉRO-COÛT par défaut (services gratuits uniquement, comme les moteurs IA utilisés ici). Si une tâche ou un choix technique nécessite un outil, service ou abonnement payant, ne le fais pas sans validation d'Élise (Finance) — mentionne-le explicitement et propose une alternative gratuite en priorité.`
 const POOL = [
   { id: 'backend-1', name: 'Julien', role: 'Développeur Backend', engine: 'mistral' },
   { id: 'frontend-1', name: 'Sacha', role: 'Développeur Frontend', engine: 'groq' },
@@ -207,7 +208,7 @@ export default async function handler(req, res) {
     try {
       reply = await askAgent(
         agent.engine,
-        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ.\n\n${orgText}\n\n${teamText}\n\n${realityFor(agent.id)}\n\nProjet : "${project.name}" (${project.description}). Ta tâche assignée : "${task.description}". Exécute-la maintenant, directement, sans demander confirmation pour ce qui est purement technique. MAIS si un choix de style, couleur, interface ou fonctionnalité est ambigu et qu'Olivier ne l'a pas précisé, NE DÉCIDE PAS seul — termine par "BESOIN_OLIVIER:" et pose la question précisément au lieu d'inventer un choix. Si tu écris du code, ${QUALITY_STANDARD} Utilise EXACTEMENT :\nFICHIER: chemin/fichier.ext\n\`\`\`langage\ncontenu\n\`\`\`\nNe recopie jamais le code hors de ce format. SEULEMENT si tu as absolument besoin d'Olivier (compte, SQL...), termine par "BESOIN_OLIVIER:" suivi des étapes numérotées. ${BESOIN_RULE}`,
+        `Tu es ${agent.name}, "${agent.role}" dans G-Tech HQ. Ton rôle : ${agent.title || agent.role}.\n\n${orgText}\n\n${teamText}\n\n${realityFor(agent.id)}\n\n${BUDGET_RULE}\n\nProjet : "${project.name}" (${project.description}). Ta tâche assignée : "${task.description}". Exécute-la maintenant, directement, sans demander confirmation pour ce qui est purement technique. MAIS si un choix de style, couleur, interface ou fonctionnalité est ambigu et qu'Olivier ne l'a pas précisé, NE DÉCIDE PAS seul — termine par "BESOIN_OLIVIER:" et pose la question précisément au lieu d'inventer un choix. Si tu écris du code, ${QUALITY_STANDARD} Utilise EXACTEMENT :\nFICHIER: chemin/fichier.ext\n\`\`\`langage\ncontenu\n\`\`\`\nNe recopie jamais le code hors de ce format. SEULEMENT si tu as absolument besoin d'Olivier (compte, SQL...), termine par "BESOIN_OLIVIER:" suivi des étapes numérotées. ${BESOIN_RULE}`,
         'Exécute cette tâche maintenant.'
       )
     } catch (e) {

@@ -35,7 +35,7 @@ export const LEADERSHIP = [
     id: 'finance',
     name: 'Élise',
     role: 'Finance & Stratégie',
-    title: 'Valide les impacts financiers, coûts, revenus, modèles économiques',
+    title: 'Valide les impacts financiers, veille à ce que TOUT reste gratuit ou au moindre coût possible (les projets G-Tech HQ visent le zéro-coût par défaut) — signale immédiatement toute suggestion payante avec son prix réel exact et propose systématiquement l\'alternative gratuite ou la moins chère',
     engine: 'mistral',
     initials: 'ÉL',
     tier: 'leadership',
