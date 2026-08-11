@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { askAgent } from '../lib/engines'
 import { getOrgSnapshot, getAgentMemory, QUALITY_STANDARD } from '../lib/context'
+import { buildAnchoredHistory } from '../lib/history'
 import { fetchDynamicAgents, nextAvailableReserveName, createDynamicAgent } from '../lib/dynamicAgents'
 import { extractFilesFromMessage, stripFileBlocks } from '../lib/codeParser'
 import { readFileAsText, downloadTextFile, READABLE_EXT, slugify } from '../lib/files'
@@ -262,7 +263,7 @@ CE QUE LE RESTE DE L'ÉQUIPE A FAIT (pas toi — n'en prends jamais le crédit) 
 
     try {
       const agent = allKnown.find(a => a.id === respondent)
-      const history = [...messages, saved].slice(-20).map(m => ({
+      const history = buildAnchoredHistory([...messages, saved]).map(m => ({
         role: m.author_id === 'user' ? 'user' : 'assistant',
         content: m.content,
       }))
@@ -350,7 +351,7 @@ CE QUE LE RESTE DE L'ÉQUIPE A FAIT (pas toi — n'en prends jamais le crédit) 
     setAdvancing(true)
     const MANAGER = LEADERSHIP.find(a => a.id === 'manager')
     try {
-      const history = messages.slice(-20).map(m => ({
+      const history = buildAnchoredHistory(messages).map(m => ({
         role: m.author_id === 'user' ? 'user' : 'assistant',
         content: m.content,
       }))

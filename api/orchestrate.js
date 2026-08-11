@@ -260,7 +260,7 @@ export default async function handler(req, res) {
           const MANAGER = LEADERSHIP.find(a => a.id === 'manager')
           const evaluation = await askAgent(
             MANAGER.engine,
-            `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${ctx.orgText}\n\n${ctx.teamText}\n\n${ctx.realityFor(MANAGER.id)}\n\nToutes les tâches prévues pour "${project.name}" sont terminées. Le projet est-il vraiment propre et fini — c'est-à-dire une VRAIE application qui peut se lancer (fichiers de config/build présents, squelette cohérent, pas juste des morceaux isolés), avec ses fonctionnalités de base réellement présentes dans les fichiers réels listés — ou reste-t-il du travail concret à faire ? Si des fichiers essentiels manquent pour que ça tourne vraiment (package.json, point d'entrée...), ce n'est PAS fini. Si le projet est vraiment fini, réponds UNIQUEMENT: TERMINE. Sinon, réponds UNIQUEMENT avec 2 à 6 nouvelles tâches concrètes au format (une par ligne, agents réels de l'équipe uniquement) :\nTACHE: <id de l'agent> | <description courte>`,
+            `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${ctx.orgText}\n\n${ctx.teamText}\n\n${ctx.realityFor(MANAGER.id)}\n\nToutes les tâches prévues pour "${project.name}" sont terminées. Le projet est-il vraiment propre et fini — c'est-à-dire une VRAIE application qui peut se lancer (fichiers de config/build présents, squelette cohérent, pas juste des morceaux isolés), avec ses fonctionnalités de base réellement présentes dans les fichiers réels listés — ou reste-t-il du travail concret à faire ? Si des fichiers essentiels manquent pour que ça tourne vraiment (package.json, point d'entrée...), ce n'est PAS fini. Si le projet est vraiment fini, réponds UNIQUEMENT: TERMINE. Sinon, réponds UNIQUEMENT avec 2 à 6 nouvelles tâches concrètes, en assignant la majorité aux agents réels de l'équipe listés ci-dessus (pas à toi-même sauf validation), au format :\nTACHE: <id de l'agent> | <description courte>`,
             'Évalue et décide maintenant.'
           )
           if (/^TERMINE/i.test(evaluation.trim())) {
@@ -271,7 +271,27 @@ export default async function handler(req, res) {
           } else {
             const lines = [...evaluation.matchAll(/TACHE:\s*([a-z0-9-]+)\s*\|\s*(.+)/gi)]
             const maxSeq = task.sequence || 0
-            const newTasks = lines.map((m, i) => ({ project_id: project.id, agent_id: m[1].trim(), description: m[2].trim(), sequence: maxSeq + 1 + i }))
+            let newTasks = lines.map((m, i) => ({ project_id: project.id, agent_id: m[1].trim(), description: m[2].trim(), sequence: maxSeq + 1 + i }))
+
+            // Même filet de sécurité qu'au lancement initial : Adrien ne doit pas tout garder pour lui
+            const { data: projectAgents } = await supabase.from('project_agents').select('agent_id').eq('project_id', project.id)
+            const assignableIds = (projectAgents || []).map(pa => pa.agent_id)
+            if (assignableIds.length > 0) {
+              const nonManagerCount = newTasks.filter(t => t.agent_id !== 'manager').length
+              if (nonManagerCount < Math.ceil(newTasks.length / 2)) {
+                let cursor = 0
+                newTasks = newTasks.map(t => {
+                  const isValidation = /valid/i.test(t.description)
+                  if (t.agent_id === 'manager' && !isValidation) {
+                    const reassigned = assignableIds[cursor % assignableIds.length]
+                    cursor++
+                    return { ...t, agent_id: reassigned }
+                  }
+                  return t
+                })
+              }
+            }
+
             if (newTasks.length > 0) {
               await supabase.from('project_tasks').insert(newTasks)
               await supabase.from('activity_log').insert({ project_id: project.id, label: `${MANAGER.name} a ajouté ${newTasks.length} tâche(s) pour continuer le projet` })

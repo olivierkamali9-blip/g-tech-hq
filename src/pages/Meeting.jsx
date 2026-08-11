@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { askAgent } from '../lib/engines'
 import { getOrgSnapshot, getAgentMemory } from '../lib/context'
+import { buildAnchoredHistory } from '../lib/history'
 import { LEADERSHIP } from '../data/agents'
 import AgentAvatar from '../components/AgentAvatar'
 import ReactMarkdown from 'react-markdown'
-import { Send, Users2, PlayCircle } from 'lucide-react'
+import { Send, Users2, PlayCircle, FileDown, Loader2 } from 'lucide-react'
+import { downloadTextFile } from '../lib/files'
 
 const FINANCE_KEYWORDS = ['budget', 'coût', 'cout', 'prix', 'rentab', 'monétis', 'monetis', 'argent', 'revenu', 'client', 'vendre', 'payant']
 const LEGAL_KEYWORDS = ['légal', 'legal', 'loi', 'contrat', 'rgpd', 'données personnelles', 'donnees personnelles', 'droit', 'licence', 'conformité', 'conformite']
@@ -26,6 +28,7 @@ export default function Meeting() {
   const [respondent, setRespondent] = useState('manager')
   const [sending, setSending] = useState(false)
   const [signal, setSignal] = useState(null)
+  const [generatingReport, setGeneratingReport] = useState(false)
   const bottomRef = useRef(null)
 
   useEffect(() => {
@@ -37,6 +40,26 @@ export default function Meeting() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
+
+  async function generateReport() {
+    if (messages.length === 0) return
+    setGeneratingReport(true)
+    try {
+      const MANAGER = LEADERSHIP.find(a => a.id === 'manager')
+      const fullTranscript = messages.map(m => `${m.author_name}: ${m.content}`).join('\n')
+      const report = await askAgent(
+        MANAGER.engine,
+        `Tu es ${MANAGER.name}, le Manager de G-Tech HQ. ${await getOrgSnapshot()}\n\nVoici la transcription complète d'une réunion qui vient de se terminer :\n${fullTranscript.slice(-8000)}\n\nRédige un compte-rendu professionnel et complet en markdown : points abordés, décisions prises, recommandations retenues, actions et responsables, échéances. Sois complet mais structuré avec des titres. En français.`,
+        [{ role: 'user', content: 'Rédige le compte-rendu maintenant.' }]
+      )
+      downloadTextFile(`compte-rendu-reunion-${new Date().toISOString().slice(0, 10)}.md`, report)
+      await supabase.from('activity_log').insert({ project_id: null, label: `${MANAGER.name} a rédigé le compte-rendu de la réunion` })
+    } catch (e) {
+      alert(`Erreur : ${e.message}`)
+    } finally {
+      setGeneratingReport(false)
+    }
+  }
 
   async function send() {
     if (!input.trim()) return
@@ -51,7 +74,7 @@ export default function Meeting() {
 
     try {
       const agent = LEADERSHIP.find(a => a.id === respondent)
-      const history = [...messages, saved].slice(-20).map(m => ({
+      const history = buildAnchoredHistory([...messages, saved]).map(m => ({
         role: m.author_id === 'user' ? 'user' : 'assistant',
         content: m.content,
       }))
@@ -92,12 +115,24 @@ export default function Meeting() {
 
   return (
     <div className="h-full flex flex-col max-w-3xl mx-auto">
-      <div className="px-4 md:px-8 py-4 md:py-5 border-b border-[color:var(--color-line)] flex items-center gap-2">
-        <Users2 size={16} className="text-[color:var(--color-gold)]" />
-        <div>
-          <h1 className="font-display text-xl">Réunion</h1>
-          <p className="text-xs text-[color:var(--color-mute)]">Espace permanent de la Direction — Adrien, Élise, Nadia</p>
+      <div className="px-4 md:px-8 py-4 md:py-5 border-b border-[color:var(--color-line)] flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Users2 size={16} className="text-[color:var(--color-gold)]" />
+          <div>
+            <h1 className="font-display text-xl">Réunion</h1>
+            <p className="text-xs text-[color:var(--color-mute)]">Espace permanent de la Direction</p>
+          </div>
         </div>
+        {messages.length > 0 && (
+          <button
+            onClick={generateReport}
+            disabled={generatingReport}
+            className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border border-[color:var(--color-gold-dim)] text-[color:var(--color-gold-bright)] hover:bg-[color:var(--color-gold)]/10 disabled:opacity-50 shrink-0"
+          >
+            {generatingReport ? <Loader2 size={12} className="animate-spin" /> : <FileDown size={12} />}
+            Compte-rendu
+          </button>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 md:py-6 space-y-5">
