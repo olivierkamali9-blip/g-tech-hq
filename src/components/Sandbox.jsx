@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from 'react'
-import { WebContainer } from '@webcontainer/api'
 import { supabase } from '../lib/supabase'
 import { askAgent } from '../lib/engines'
 import { getOrgSnapshot, getProjectReality, QUALITY_STANDARD } from '../lib/context'
@@ -9,8 +8,15 @@ import { Play, Loader2, TerminalSquare } from 'lucide-react'
 let containerInstance = null // une seule instance WebContainer à la fois dans l'onglet, réutilisée
 
 async function getContainer() {
-  if (!containerInstance) containerInstance = await WebContainer.boot()
+  if (!containerInstance) {
+    const { WebContainer } = await import('@webcontainer/api')
+    containerInstance = await WebContainer.boot()
+  }
   return containerInstance
+}
+
+function isSupported() {
+  return typeof window !== 'undefined' && window.crossOriginIsolated === true && typeof SharedArrayBuffer !== 'undefined'
 }
 
 function toFileTree(files) {
@@ -51,68 +57,78 @@ export default function Sandbox({ project, agent }) {
   }
 
   async function runOnce(attempt = 1) {
-    attemptRef.current = attempt
-    setStatus('booting')
-    setPreviewUrl(null)
-    appendLog(`\n--- Tentative ${attempt}/${MAX_ATTEMPTS} ---\n`)
-
-    const { data: files } = await supabase.from('project_files').select('path, content').eq('project_id', project.id)
-    if (!files || files.length === 0) {
-      appendLog('Aucun fichier à tester pour l\'instant.\n')
-      setStatus('idle')
-      return
-    }
-    const hasPackageJson = files.some(f => f.path === 'package.json')
-    if (!hasPackageJson) {
-      appendLog('Pas de package.json — ce projet n\'est pas encore une vraie application testable.\n')
-      setStatus('error')
-      return
-    }
-
-    const container = await getContainer()
-    await container.mount(toFileTree(files))
-
-    setStatus('installing')
-    appendLog('$ npm install\n')
-    const install = await container.spawn('npm', ['install'])
-    install.output.pipeTo(new WritableStream({ write: chunk => appendLog(chunk) }))
-    const installCode = await install.exit
-    if (installCode !== 0) {
-      appendLog(`\n❌ npm install a échoué (code ${installCode})\n`)
-      if (attemptRef.current < MAX_ATTEMPTS) {
-        await tryAutoFix(files, log)
-      } else {
-        appendLog(`\n⏹ Abandon après ${MAX_ATTEMPTS} tentatives.\n`)
+    try {
+      if (!isSupported()) {
+        appendLog('Le Bac à sable n\'est pas pris en charge par ce navigateur ou cette page (nécessite un contexte isolé). Le reste de l\'application fonctionne normalement.\n')
         setStatus('error')
+        return
       }
-      return
-    }
+      attemptRef.current = attempt
+      setStatus('booting')
+      setPreviewUrl(null)
+      appendLog(`\n--- Tentative ${attempt}/${MAX_ATTEMPTS} ---\n`)
 
-    setStatus('running')
-    appendLog('\n$ npm run dev\n')
-    const dev = await container.spawn('npm', ['run', 'dev'])
-    dev.output.pipeTo(new WritableStream({ write: chunk => appendLog(chunk) }))
+      const { data: files } = await supabase.from('project_files').select('path, content').eq('project_id', project.id)
+      if (!files || files.length === 0) {
+        appendLog('Aucun fichier à tester pour l\'instant.\n')
+        setStatus('idle')
+        return
+      }
+      const hasPackageJson = files.some(f => f.path === 'package.json')
+      if (!hasPackageJson) {
+        appendLog('Pas de package.json — ce projet n\'est pas encore une vraie application testable.\n')
+        setStatus('error')
+        return
+      }
 
-    container.on('server-ready', (port, url) => {
-      appendLog(`\n✅ Serveur prêt : ${url}\n`)
-      setPreviewUrl(url)
-      setStatus('running')
-    })
+      const container = await getContainer()
+      await container.mount(toFileTree(files))
 
-    // Si rien ne démarre après un long moment (npm install peut être lent au premier lancement), on considère un échec
-    setTimeout(() => {
-      setStatus(s => {
-        if (s === 'running' && !previewUrl) {
-          if (attemptRef.current < MAX_ATTEMPTS) {
-            tryAutoFix(files, log)
-          } else {
-            appendLog(`\n⏹ Abandon après ${MAX_ATTEMPTS} tentatives — regarde le log ci-dessus, il faudra probablement une correction manuelle.\n`)
-          }
-          return 'error'
+      setStatus('installing')
+      appendLog('$ npm install\n')
+      const install = await container.spawn('npm', ['install'])
+      install.output.pipeTo(new WritableStream({ write: chunk => appendLog(chunk) }))
+      const installCode = await install.exit
+      if (installCode !== 0) {
+        appendLog(`\n❌ npm install a échoué (code ${installCode})\n`)
+        if (attemptRef.current < MAX_ATTEMPTS) {
+          await tryAutoFix(files, log)
+        } else {
+          appendLog(`\n⏹ Abandon après ${MAX_ATTEMPTS} tentatives.\n`)
+          setStatus('error')
         }
-        return s
+        return
+      }
+
+      setStatus('running')
+      appendLog('\n$ npm run dev\n')
+      const dev = await container.spawn('npm', ['run', 'dev'])
+      dev.output.pipeTo(new WritableStream({ write: chunk => appendLog(chunk) }))
+
+      container.on('server-ready', (port, url) => {
+        appendLog(`\n✅ Serveur prêt : ${url}\n`)
+        setPreviewUrl(url)
+        setStatus('running')
       })
-    }, 45000)
+
+      // Si rien ne démarre après un long moment (npm install peut être lent au premier lancement), on considère un échec
+      setTimeout(() => {
+        setStatus(s => {
+          if (s === 'running' && !previewUrl) {
+            if (attemptRef.current < MAX_ATTEMPTS) {
+              tryAutoFix(files, log)
+            } else {
+              appendLog(`\n⏹ Abandon après ${MAX_ATTEMPTS} tentatives — regarde le log ci-dessus, il faudra probablement une correction manuelle.\n`)
+            }
+            return 'error'
+          }
+          return s
+        })
+      }, 45000)
+    } catch (e) {
+      appendLog(`\n❌ Le Bac à sable a rencontré un problème : ${e.message}\n`)
+      setStatus('error')
+    }
   }
 
   async function tryAutoFix(files, currentLog) {
