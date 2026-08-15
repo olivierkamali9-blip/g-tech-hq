@@ -66,6 +66,7 @@ export async function getOrgSnapshot() {
 DATE RÉELLE D'AUJOURD'HUI : ${now} — ne fais jamais d'erreur de date, ne confonds jamais avec une autre date, calcule les échéances à partir de CETTE date précise.
 ${HIERARCHY_TEXT}
 ${PHILOSOPHY}
+${METHOD}
 ÉQUIPE RÉELLE : ${teamList}
 PROJETS : ${projectsList}
 DERNIÈRE ACTIVITÉ : ${activityList}
